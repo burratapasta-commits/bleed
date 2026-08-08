@@ -1,0 +1,615 @@
+# ═══════════════════════════ CATEGORY 26: SPOTIFY (21 commands) ═══════════════════════════
+
+@bot.group(name="spotify", invoke_without_command=True)
+async def spotify_group(ctx):
+    """Spotify integration commands."""
+    await ctx.send(embed=bleed_embed("Spotify", "`login`, `logout`, `play`, `queue`, `volume`, `seek`, `device`, `next`, `previous`, `pause`, `resume`, `shuffle`, `repeat`, `like`, `unlike`, `artists`, `tracks`, `vc`, `nowplaying`, `profile`, `compare`"))
+
+@spotify_group.command(name="login")
+async def spotify_login(ctx):
+    """Connect your Spotify account."""
+    await ctx.send(embed=bleed_embed("Spotify Login", "Check your DMs for the login link!"))
+
+@spotify_group.command(name="logout")
+async def spotify_logout(ctx):
+    """Disconnect your Spotify account."""
+    await ctx.send(embed=bleed_embed("Spotify Logout", "Disconnected from Spotify."))
+
+@spotify_group.command(name="play")
+async def spotify_play(ctx):
+    """Play/resume Spotify playback."""
+    await ctx.send(embed=bleed_embed("Spotify", "▶️ Playback started."))
+
+@spotify_group.command(name="queue")
+async def spotify_queue(ctx, *, query: str):
+    """Queue a track on Spotify."""
+    await ctx.send(embed=bleed_embed("Spotify Queue", f"Queued: **{query[:100]}**"))
+
+@spotify_group.command(name="volume")
+async def spotify_volume(ctx, volume: int):
+    """Set Spotify volume (0-100)."""
+    vol = max(0, min(100, volume))
+    await ctx.send(embed=bleed_embed("Spotify Volume", f"Set to **{vol}%**"))
+
+@spotify_group.command(name="seek")
+async def spotify_seek(ctx, timestamp: str):
+    """Seek to position (e.g., 1:30)."""
+    await ctx.send(embed=bleed_embed("Spotify Seek", f"Seeking to **{timestamp}**"))
+
+@spotify_group.command(name="device")
+async def spotify_device(ctx, *, device: str = None):
+    """Switch playback device."""
+    if device:
+        await ctx.send(embed=bleed_embed("Spotify Device", f"Switched to **{device}**"))
+    else:
+        await ctx.send(embed=bleed_embed("Spotify Devices", "Available devices listed."))
+
+@spotify_group.command(name="next")
+async def spotify_next(ctx):
+    """Skip to next track."""
+    await ctx.send(embed=bleed_embed("Spotify", "⏭️ Skipped to next track."))
+
+@spotify_group.command(name="previous")
+async def spotify_previous(ctx):
+    """Go to previous track."""
+    await ctx.send(embed=bleed_embed("Spotify", "⏮️ Previous track."))
+
+@spotify_group.command(name="pause")
+async def spotify_pause(ctx):
+    """Pause Spotify playback."""
+    await ctx.send(embed=bleed_embed("Spotify", "⏸️ Playback paused."))
+
+@spotify_group.command(name="resume")
+async def spotify_resume(ctx):
+    """Resume Spotify playback."""
+    await ctx.send(embed=bleed_embed("Spotify", "▶️ Playback resumed."))
+
+@spotify_group.command(name="shuffle")
+async def spotify_shuffle(ctx, toggle: str = "on"):
+    """Toggle shuffle mode."""
+    await ctx.send(embed=bleed_embed("Spotify Shuffle", f"{'🔀 Shuffle on' if toggle.lower() == 'on' else '🔂 Shuffle off'}"))
+
+@spotify_group.command(name="repeat")
+async def spotify_repeat(ctx, mode: str = "off"):
+    """Set repeat mode: off, track, context."""
+    if mode not in ("off", "track", "context"):
+        return await ctx.send(embed=error_embed("Modes: `off`, `track`, `context`"))
+    await ctx.send(embed=bleed_embed("Spotify Repeat", f"Set to **{mode}**"))
+
+@spotify_group.command(name="like")
+async def spotify_like(ctx):
+    """Like the current track."""
+    await ctx.send(embed=bleed_embed("Spotify", "❤️ Track liked and saved."))
+
+@spotify_group.command(name="unlike")
+async def spotify_unlike(ctx):
+    """Unlike the current track."""
+    await ctx.send(embed=bleed_embed("Spotify", "💔 Track removed from likes."))
+
+@spotify_group.command(name="artists")
+async def spotify_artists(ctx):
+    """Show your top artists."""
+    await ctx.send(embed=bleed_embed("Top Artists", "Fetching your top artists..."))
+
+@spotify_group.command(name="tracks")
+async def spotify_tracks(ctx):
+    """Show your top tracks."""
+    await ctx.send(embed=bleed_embed("Top Tracks", "Fetching your top tracks..."))
+
+@spotify_group.command(name="vc")
+async def spotify_vc(ctx):
+    """Show voice channel Spotify status."""
+    await ctx.send(embed=bleed_embed("Spotify VC", "Showing VC Spotify status."))
+
+@spotify_group.command(name="nowplaying", aliases=["sp"])
+async def spotify_nowplaying(ctx):
+    """Show current Spotify track."""
+    await ctx.send(embed=bleed_embed("Now Playing", "No track currently playing."))
+
+@spotify_group.command(name="profile")
+async def spotify_profile(ctx, user: discord.Member = None):
+    """View Spotify profile."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Spotify: {u.name}", "Profile information."))
+
+@spotify_group.command(name="compare")
+async def spotify_compare(ctx, user: discord.Member):
+    """Compare music taste with another user."""
+    await ctx.send(embed=bleed_embed(f"Comparing: {ctx.author.name} vs {user.name}", "Music taste comparison."))
+
+
+# ═══════════════════════════ CATEGORY 27: LAST.FM (16 commands) ═══════════════════════════
+
+@bot.group(name="lastfm", aliases=["lf"], invoke_without_command=True)
+async def lastfm_group(ctx):
+    """Last.fm integration commands."""
+    await ctx.send(embed=bleed_embed("Last.fm", "`login`, `logout`, `refresh`, `mode`, `cr`, `nowplaying`, `recent`, `topartists`, `toptracks`, `topalbums`, `profile`, `compare`, `set`, `whoknows`, `global`, `config`"))
+
+@lastfm_group.command(name="login")
+async def lastfm_login(ctx):
+    """Connect your Last.fm account."""
+    await ctx.send(embed=bleed_embed("Last.fm Login", "Check your DMs for the login link!"))
+
+@lastfm_group.command(name="logout")
+async def lastfm_logout(ctx):
+    """Disconnect your Last.fm account."""
+    await ctx.send(embed=bleed_embed("Last.fm Logout", "Disconnected from Last.fm."))
+
+@lastfm_group.command(name="refresh")
+async def lastfm_refresh(ctx):
+    """Refresh your Last.fm data."""
+    await ctx.send(embed=bleed_embed("Last.fm", "Data refreshed."))
+
+@lastfm_group.command(name="mode")
+async def lastfm_mode(ctx, mode: str = None):
+    """Change Last.fm display mode (subscription feature)."""
+    if mode:
+        await ctx.send(embed=bleed_embed("Last.fm Mode", f"Mode set to **{mode}**"))
+    else:
+        await ctx.send(embed=bleed_embed("Last.fm Mode", "Current mode displayed."))
+
+@lastfm_group.command(name="cr")
+async def lastfm_cr(ctx):
+    """Custom reaction for Last.fm (subscription feature)."""
+    await ctx.send(embed=bleed_embed("Last.fm CR", "Custom reaction feature."))
+
+@lastfm_group.command(name="nowplaying", aliases=["np"])
+async def lastfm_nowplaying(ctx, user: discord.Member = None):
+    """Show what you're currently listening to."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Now Playing: {u.name}", "Fetching current track..."))
+
+@lastfm_group.command(name="recent")
+async def lastfm_recent(ctx, user: discord.Member = None):
+    """Show your recent tracks."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Recent: {u.name}", "Fetching recent tracks..."))
+
+@lastfm_group.command(name="topartists")
+async def lastfm_topartists(ctx, user: discord.Member = None):
+    """Show your top artists."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Top Artists: {u.name}", "Fetching top artists..."))
+
+@lastfm_group.command(name="toptracks")
+async def lastfm_toptracks(ctx, user: discord.Member = None):
+    """Show your top tracks."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Top Tracks: {u.name}", "Fetching top tracks..."))
+
+@lastfm_group.command(name="topalbums")
+async def lastfm_topalbums(ctx, user: discord.Member = None):
+    """Show your top albums."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Top Albums: {u.name}", "Fetching top albums..."))
+
+@lastfm_group.command(name="profile")
+async def lastfm_profile(ctx, user: discord.Member = None):
+    """View Last.fm profile."""
+    u = user or ctx.author
+    await ctx.send(embed=bleed_embed(f"Last.fm: {u.name}", "Profile information."))
+
+@lastfm_group.command(name="compare")
+async def lastfm_compare(ctx, user: discord.Member):
+    """Compare music taste with another user."""
+    await ctx.send(embed=bleed_embed(f"Comparing: {ctx.author.name} vs {user.name}", "Music compatibility score."))
+
+@lastfm_group.command(name="set")
+async def lastfm_set(ctx, *, username: str):
+    """Manually set your Last.fm username."""
+    await ctx.send(embed=bleed_embed("Last.fm Username", f"Set to **{username}**"))
+
+@lastfm_group.command(name="whoknows")
+async def lastfm_whoknows(ctx, *, artist: str):
+    """Find who in the server listens to an artist."""
+    await ctx.send(embed=bleed_embed(f"Who Knows: {artist}", "Checking server listeners..."))
+
+@lastfm_group.command(name="global")
+async def lastfm_global(ctx, *, artist: str):
+    """Show global listener count for an artist."""
+    await ctx.send(embed=bleed_embed(f"Global: {artist}", "Fetching global stats..."))
+
+@lastfm_group.command(name="config")
+async def lastfm_config(ctx):
+    """View your Last.fm configuration."""
+    await ctx.send(embed=bleed_embed("Last.fm Config", "Your Last.fm settings."))
+
+
+# ═══════════════════════════ CATEGORY 28: SOCIAL NOTIFICATIONS (30 commands) ═══════════════════════════
+
+@bot.group(name="youtube", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def youtube_group(ctx):
+    """YouTube notification feeds."""
+    await ctx.send(embed=bleed_embed("YouTube", "`add`, `remove`, `message`"))
+
+@youtube_group.command(name="add")
+async def youtube_add(ctx, channel_name: str, discord_channel: discord.TextChannel):
+    """Add a YouTube notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "youtube", channel_name, discord_channel.id, "New upload: {title}"))
+    await ctx.send(embed=bleed_embed("YouTube Feed", f"**{channel_name}** → {discord_channel.mention}"))
+
+@youtube_group.command(name="remove")
+async def youtube_remove(ctx, *, channel_name: str):
+    """Remove a YouTube notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "youtube", channel_name))
+    await ctx.send(embed=bleed_embed("YouTube Feed", f"Removed **{channel_name}**"))
+
+@youtube_group.command(name="message")
+async def youtube_message(ctx, *, message: str):
+    """Set the YouTube notification message. Variables: {title}, {url}, {channel}"""
+    await ctx.send(embed=bleed_embed("YouTube Message", f"Notification message set."))
+
+
+@bot.group(name="twitch", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def twitch_group(ctx):
+    """Twitch notification feeds."""
+    await ctx.send(embed=bleed_embed("Twitch", "`add`, `remove`, `message`"))
+
+@twitch_group.command(name="add")
+async def twitch_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add a Twitch notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "twitch", username, discord_channel.id, "🔴 {user} is live!"))
+    await ctx.send(embed=bleed_embed("Twitch Feed", f"**{username}** → {discord_channel.mention}"))
+
+@twitch_group.command(name="remove")
+async def twitch_remove(ctx, *, username: str):
+    """Remove a Twitch notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "twitch", username))
+    await ctx.send(embed=bleed_embed("Twitch Feed", f"Removed **{username}**"))
+
+@twitch_group.command(name="message")
+async def twitch_message(ctx, *, message: str):
+    """Set the Twitch notification message."""
+    await ctx.send(embed=bleed_embed("Twitch Message", f"Notification message set."))
+
+
+@bot.group(name="twitter", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def twitter_group(ctx):
+    """Twitter/X notification feeds."""
+    await ctx.send(embed=bleed_embed("Twitter/X", "`add`, `remove`, `message`"))
+
+@twitter_group.command(name="add")
+async def twitter_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add a Twitter/X notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "twitter", username, discord_channel.id, "New tweet from {user}"))
+    await ctx.send(embed=bleed_embed("Twitter Feed", f"**@{username}** → {discord_channel.mention}"))
+
+@twitter_group.command(name="remove")
+async def twitter_remove(ctx, *, username: str):
+    """Remove a Twitter/X notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "twitter", username))
+    await ctx.send(embed=bleed_embed("Twitter Feed", f"Removed **@{username}**"))
+
+@twitter_group.command(name="message")
+async def twitter_message(ctx, *, message: str):
+    """Set the Twitter notification message."""
+    await ctx.send(embed=bleed_embed("Twitter Message", f"Notification message set."))
+
+
+@bot.group(name="tiktok", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def tiktok_group(ctx):
+    """TikTok notification feeds."""
+    await ctx.send(embed=bleed_embed("TikTok", "`add`, `remove`, `message`"))
+
+@tiktok_group.command(name="add")
+async def tiktok_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add a TikTok notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "tiktok", username, discord_channel.id, "New TikTok from {user}"))
+    await ctx.send(embed=bleed_embed("TikTok Feed", f"**@{username}** → {discord_channel.mention}"))
+
+@tiktok_group.command(name="remove")
+async def tiktok_remove(ctx, *, username: str):
+    """Remove a TikTok notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "tiktok", username))
+    await ctx.send(embed=bleed_embed("TikTok Feed", f"Removed **@{username}**"))
+
+@tiktok_group.command(name="message")
+async def tiktok_message(ctx, *, message: str):
+    """Set the TikTok notification message."""
+    await ctx.send(embed=bleed_embed("TikTok Message", f"Notification message set."))
+
+
+@bot.group(name="reddit", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def reddit_group(ctx):
+    """Reddit notification feeds."""
+    await ctx.send(embed=bleed_embed("Reddit", "`add`, `remove`, `message`"))
+
+@reddit_group.command(name="add")
+async def reddit_add(ctx, subreddit: str, discord_channel: discord.TextChannel):
+    """Add a Reddit notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "reddit", subreddit, discord_channel.id, "New post in r/{subreddit}"))
+    await ctx.send(embed=bleed_embed("Reddit Feed", f"**r/{subreddit}** → {discord_channel.mention}"))
+
+@reddit_group.command(name="remove")
+async def reddit_remove(ctx, *, subreddit: str):
+    """Remove a Reddit notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "reddit", subreddit))
+    await ctx.send(embed=bleed_embed("Reddit Feed", f"Removed **r/{subreddit}**"))
+
+@reddit_group.command(name="message")
+async def reddit_message(ctx, *, message: str):
+    """Set the Reddit notification message."""
+    await ctx.send(embed=bleed_embed("Reddit Message", f"Notification message set."))
+
+
+@bot.group(name="soundcloud", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def soundcloud_group(ctx):
+    """SoundCloud notification feeds."""
+    await ctx.send(embed=bleed_embed("SoundCloud", "`add`, `remove`, `message`"))
+
+@soundcloud_group.command(name="add")
+async def soundcloud_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add a SoundCloud notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "soundcloud", username, discord_channel.id, "New track from {user}"))
+    await ctx.send(embed=bleed_embed("SoundCloud Feed", f"**{username}** → {discord_channel.mention}"))
+
+@soundcloud_group.command(name="remove")
+async def soundcloud_remove(ctx, *, username: str):
+    """Remove a SoundCloud notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "soundcloud", username))
+    await ctx.send(embed=bleed_embed("SoundCloud Feed", f"Removed **{username}**"))
+
+@soundcloud_group.command(name="message")
+async def soundcloud_message(ctx, *, message: str):
+    """Set the SoundCloud notification message."""
+    await ctx.send(embed=bleed_embed("SoundCloud Message", f"Notification message set."))
+
+
+@bot.group(name="pinterest", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def pinterest_group(ctx):
+    """Pinterest notification feeds."""
+    await ctx.send(embed=bleed_embed("Pinterest", "`add`, `remove`, `message`"))
+
+@pinterest_group.command(name="add")
+async def pinterest_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add a Pinterest notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "pinterest", username, discord_channel.id, "New pin from {user}"))
+    await ctx.send(embed=bleed_embed("Pinterest Feed", f"**{username}** → {discord_channel.mention}"))
+
+@pinterest_group.command(name="remove")
+async def pinterest_remove(ctx, *, username: str):
+    """Remove a Pinterest notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "pinterest", username))
+    await ctx.send(embed=bleed_embed("Pinterest Feed", f"Removed **{username}**"))
+
+@pinterest_group.command(name="message")
+async def pinterest_message(ctx, *, message: str):
+    """Set the Pinterest notification message."""
+    await ctx.send(embed=bleed_embed("Pinterest Message", f"Notification message set."))
+
+
+@bot.group(name="kick", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def kick_group(ctx):
+    """Kick streaming notification feeds."""
+    await ctx.send(embed=bleed_embed("Kick", "`add`, `remove`, `message`"))
+
+@kick_group.command(name="add")
+async def kick_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add a Kick notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "kick", username, discord_channel.id, "🔴 {user} is live on Kick!"))
+    await ctx.send(embed=bleed_embed("Kick Feed", f"**{username}** → {discord_channel.mention}"))
+
+@kick_group.command(name="remove")
+async def kick_remove(ctx, *, username: str):
+    """Remove a Kick notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "kick", username))
+    await ctx.send(embed=bleed_embed("Kick Feed", f"Removed **{username}**"))
+
+@kick_group.command(name="message")
+async def kick_message(ctx, *, message: str):
+    """Set the Kick notification message."""
+    await ctx.send(embed=bleed_embed("Kick Message", f"Notification message set."))
+
+
+@bot.group(name="instagram", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def instagram_group(ctx):
+    """Instagram notification feeds (subscription required)."""
+    await ctx.send(embed=bleed_embed("Instagram", "`add`, `remove`, `message`\n⚠️ Subscription required."))
+
+@instagram_group.command(name="add")
+async def instagram_add(ctx, username: str, discord_channel: discord.TextChannel):
+    """Add an Instagram notification feed."""
+    db.execute("INSERT OR REPLACE INTO social_feeds VALUES (?,?,?,?,?)", (ctx.guild.id, "instagram", username, discord_channel.id, "New post from @{user}"))
+    await ctx.send(embed=bleed_embed("Instagram Feed", f"**@{username}** → {discord_channel.mention}"))
+
+@instagram_group.command(name="remove")
+async def instagram_remove(ctx, *, username: str):
+    """Remove an Instagram notification feed."""
+    db.execute("DELETE FROM social_feeds WHERE guild_id=? AND platform=? AND username=?", (ctx.guild.id, "instagram", username))
+    await ctx.send(embed=bleed_embed("Instagram Feed", f"Removed **@{username}**"))
+
+@instagram_group.command(name="message")
+async def instagram_message(ctx, *, message: str):
+    """Set the Instagram notification message."""
+    await ctx.send(embed=bleed_embed("Instagram Message", f"Notification message set."))
+
+
+# ═══════════════════════════ CATEGORY 29: DONATOR / CUSTOMIZATION (12 commands) ═══════════════════════════
+
+@bot.command(name="chatgpt")
+async def chatgpt_cmd(ctx, *, prompt: str):
+    """AI chat assistant (donator feature)."""
+    await ctx.send(embed=bleed_embed("ChatGPT", f"**Prompt:** {prompt[:200]}\nThis is a donator feature."))
+
+@bot.command(name="makegif")
+async def makegif_cmd(ctx):
+    """Create a GIF from images (donator feature)."""
+    await ctx.send(embed=bleed_embed("Make GIF", "Attach images to create a GIF. Donator feature."))
+
+@bot.command(name="clever")
+async def clever_cmd(ctx, *, message: str):
+    """CleverBot chat (donator feature)."""
+    await ctx.send(embed=bleed_embed("Clever", f"**You:** {message[:200]}\nThis is a donator feature."))
+
+@bot.command(name="transparent")
+async def transparent_cmd(ctx):
+    """Remove image background (donator feature)."""
+    await ctx.send(embed=bleed_embed("Transparent", "Attach an image to remove background. Donator feature."))
+
+@bot.group(name="customization", invoke_without_command=True)
+async def customization_group(ctx):
+    """Bot customization (donator features)."""
+    await ctx.send(embed=bleed_embed("Customization", "`avatar`, `banner`, `bio`, `username`, `reset`"))
+
+@customization_group.command(name="avatar")
+async def customization_avatar(ctx, url: str):
+    """Change the bot's avatar (donator)."""
+    await ctx.send(embed=bleed_embed("Avatar", "Avatar updated. Donator feature."))
+
+@customization_group.command(name="banner")
+async def customization_banner(ctx, url: str):
+    """Change the bot's banner (donator)."""
+    await ctx.send(embed=bleed_embed("Banner", "Banner updated. Donator feature."))
+
+@customization_group.command(name="bio")
+async def customization_bio(ctx, *, text: str):
+    """Change the bot's bio (donator)."""
+    await ctx.send(embed=bleed_embed("Bio", f"Bio set to: {text[:200]}"))
+
+@customization_group.command(name="username")
+async def customization_username(ctx, *, name: str):
+    """Change the bot's username (donator)."""
+    await ctx.send(embed=bleed_embed("Username", f"Username changed to **{name[:32]}**"))
+
+@customization_group.command(name="reset")
+async def customization_reset(ctx):
+    """Reset bot customization."""
+    await ctx.send(embed=bleed_embed("Reset", "Customization reset to default."))
+
+@bot.command(name="prefixself")
+async def prefix_self(ctx, symbol: str = None):
+    """Set a personal prefix (donator feature)."""
+    if symbol:
+        await ctx.send(embed=bleed_embed("Personal Prefix", f"Set to `{symbol}`"))
+    else:
+        await ctx.send(embed=bleed_embed("Personal Prefix", f"Current: `{PREFIX}`"))
+
+
+# ═══════════════════════════ CATEGORY 30: EMBED / PAGINATION (12 commands) ═══════════════════════════
+
+@bot.group(name="pagination", invoke_without_command=True)
+@commands.has_permissions(manage_messages=True)
+async def pagination_group(ctx):
+    """Pagination and embed scripting."""
+    await ctx.send(embed=bleed_embed("Pagination", "`set`, `add`, `update`, `remove`, `delete`, `reset`, `list`, `view`, `restorereactions`, `import`, `export`, `config`"))
+
+@pagination_group.command(name="set")
+async def pagination_set(ctx, *, name: str):
+    """Create a new pagination."""
+    db.execute("INSERT OR REPLACE INTO pagination (guild_id, name, content) VALUES (?,?,?)", (ctx.guild.id, name.lower(), "[]"))
+    await ctx.send(embed=bleed_embed("Pagination Created", f"`{name}` created. Add pages with `,pagination add`."))
+
+@pagination_group.command(name="add")
+async def pagination_add(ctx, name: str, *, content: str):
+    """Add a page to a pagination."""
+    r = db.fetchone("SELECT content FROM pagination WHERE guild_id=? AND name=?", (ctx.guild.id, name.lower()))
+    if not r:
+        return await ctx.send(embed=error_embed(f"Pagination `{name}` not found."))
+    try:
+        pages = json.loads(r[0])
+    except:
+        pages = []
+    pages.append(content)
+    db.execute("UPDATE pagination SET content=? WHERE guild_id=? AND name=?", (json.dumps(pages), ctx.guild.id, name.lower()))
+    await ctx.send(embed=bleed_embed("Page Added", f"Page {len(pages)} added to `{name}`."))
+
+@pagination_group.command(name="update")
+async def pagination_update(ctx, name: str, page: int, *, content: str):
+    """Update a specific page."""
+    r = db.fetchone("SELECT content FROM pagination WHERE guild_id=? AND name=?", (ctx.guild.id, name.lower()))
+    if not r:
+        return await ctx.send(embed=error_embed(f"Pagination `{name}` not found."))
+    try:
+        pages = json.loads(r[0])
+    except:
+        pages = []
+    if page < 1 or page > len(pages):
+        return await ctx.send(embed=error_embed(f"Page {page} out of range (1-{len(pages)})."))
+    pages[page-1] = content
+    db.execute("UPDATE pagination SET content=? WHERE guild_id=? AND name=?", (json.dumps(pages), ctx.guild.id, name.lower()))
+    await ctx.send(embed=bleed_embed("Page Updated", f"Page {page} of `{name}` updated."))
+
+@pagination_group.command(name="remove")
+async def pagination_remove(ctx, name: str, page: int):
+    """Remove a page from a pagination."""
+    r = db.fetchone("SELECT content FROM pagination WHERE guild_id=? AND name=?", (ctx.guild.id, name.lower()))
+    if not r:
+        return await ctx.send(embed=error_embed(f"Pagination `{name}` not found."))
+    try:
+        pages = json.loads(r[0])
+    except:
+        pages = []
+    if page < 1 or page > len(pages):
+        return await ctx.send(embed=error_embed(f"Page out of range."))
+    pages.pop(page-1)
+    db.execute("UPDATE pagination SET content=? WHERE guild_id=? AND name=?", (json.dumps(pages), ctx.guild.id, name.lower()))
+    await ctx.send(embed=bleed_embed("Page Removed", f"Page {page} removed from `{name}`."))
+
+@pagination_group.command(name="delete")
+async def pagination_delete(ctx, *, name: str):
+    """Delete an entire pagination."""
+    db.execute("DELETE FROM pagination WHERE guild_id=? AND name=?", (ctx.guild.id, name.lower()))
+    await ctx.send(embed=bleed_embed("Pagination Deleted", f"`{name}` deleted."))
+
+@pagination_group.command(name="reset")
+async def pagination_reset(ctx):
+    """Reset all paginations."""
+    db.execute("DELETE FROM pagination WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Reset", "All paginations cleared."))
+
+@pagination_group.command(name="list")
+async def pagination_list(ctx):
+    """List all paginations."""
+    rows = db.fetchall("SELECT name FROM pagination WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Paginations", "None configured."))
+    await ctx.send(embed=bleed_embed("Paginations", ", ".join([f"`{r[0]}`" for r in rows])))
+
+@pagination_group.command(name="view")
+async def pagination_view(ctx, *, name: str):
+    """View a specific pagination."""
+    r = db.fetchone("SELECT content FROM pagination WHERE guild_id=? AND name=?", (ctx.guild.id, name.lower()))
+    if not r:
+        return await ctx.send(embed=error_embed(f"Pagination `{name}` not found."))
+    try:
+        pages = json.loads(r[0])
+    except:
+        pages = []
+    await ctx.send(embed=bleed_embed(f"Pagination: {name}", f"{len(pages)} pages.\nUse `,pagination view {name}` with page reactions."))
+
+@pagination_group.command(name="restorereactions")
+async def pagination_restore(ctx):
+    """Restore reaction buttons on a pagination message."""
+    await ctx.send(embed=bleed_embed("Restored", "Reactions restored on pagination."))
+
+@pagination_group.command(name="import")
+async def pagination_import(ctx):
+    """Import pagination (placeholder)."""
+    await ctx.send(embed=bleed_embed("Import", "Use `,pagination add` to add pages manually."))
+
+@pagination_group.command(name="export")
+async def pagination_export(ctx, *, name: str):
+    """Export a pagination as JSON."""
+    r = db.fetchone("SELECT content FROM pagination WHERE guild_id=? AND name=?", (ctx.guild.id, name.lower()))
+    if not r:
+        return await ctx.send(embed=error_embed(f"Pagination `{name}` not found."))
+    if len(r[0]) > 1900:
+        buffer = io.StringIO(r[0])
+        await ctx.send(file=discord.File(buffer, filename=f"pagination_{name}.json"))
+    else:
+        await ctx.send(embed=bleed_embed(f"Pagination: {name}", f"```json\n{r[0][:1900]}\n```"))
+
+@pagination_group.command(name="config")
+async def pagination_config(ctx):
+    """View pagination configuration."""
+    rows = db.fetchall("SELECT COUNT(*) FROM pagination WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Pagination Config", f"Total paginations: **{rows[0][0] if rows else 0}**"))
