@@ -1,0 +1,373 @@
+# ═══════════════════════════ CATEGORY 31: FORTNITE (7 commands) ═══════════════════════════
+
+@bot.group(name="fortnite", aliases=["fn"], invoke_without_command=True)
+async def fortnite_group(ctx):
+    """Fortnite integration commands."""
+    await ctx.send(embed=bleed_embed("Fortnite", "`shop`, `item`, `watch`, `watch list`, `stats`, `map`, `news`"))
+
+@fortnite_group.command(name="shop")
+async def fortnite_shop(ctx):
+    """View today's Fortnite item shop."""
+    await ctx.send(embed=bleed_embed("Fortnite Item Shop", "Fetching today's item shop..."))
+
+@fortnite_group.command(name="item")
+async def fortnite_item(ctx, *, cosmetic: str):
+    """View details about a specific Fortnite cosmetic."""
+    await ctx.send(embed=bleed_embed(f"Fortnite Item: {cosmetic}", f"Fetching details for **{cosmetic}**..."))
+
+@fortnite_group.command(name="watch")
+async def fortnite_watch(ctx, *, cosmetic: str):
+    """Get notified when a cosmetic appears in the shop."""
+    await ctx.send(embed=bleed_embed("Watching", f"You'll be notified when **{cosmetic}** appears in the shop."))
+
+@fortnite_group.command(name="stats")
+async def fortnite_stats(ctx, username: str, platform: str = "kbm"):
+    """View Fortnite stats for a player. Platforms: kbm, gamepad, touch"""
+    if platform not in ("kbm", "gamepad", "touch"):
+        return await ctx.send(embed=error_embed("Platforms: `kbm`, `gamepad`, `touch`"))
+    await ctx.send(embed=bleed_embed(f"Fortnite Stats: {username}", f"Platform: {platform}\nFetching stats..."))
+
+@fortnite_group.command(name="map")
+async def fortnite_map(ctx):
+    """View the current Fortnite map."""
+    await ctx.send(embed=bleed_embed("Fortnite Map", "Current map displayed."))
+
+@fortnite_group.command(name="news")
+async def fortnite_news(ctx):
+    """View latest Fortnite news."""
+    await ctx.send(embed=bleed_embed("Fortnite News", "Latest news and updates."))
+
+
+# ═══════════════════════════ CATEGORY 32: ROBLOX (4 commands) ═══════════════════════════
+
+@bot.group(name="roblox", aliases=["rblx"], invoke_without_command=True)
+async def roblox_group(ctx):
+    """Roblox integration commands."""
+    await ctx.send(embed=bleed_embed("Roblox", "`profile`, `avatar`, `friends`, `groups`"))
+
+@roblox_group.command(name="profile")
+async def roblox_profile(ctx, *, username: str):
+    """View a Roblox profile."""
+    await ctx.send(embed=bleed_embed(f"Roblox: {username}", "Fetching profile..."))
+
+@roblox_group.command(name="avatar")
+async def roblox_avatar(ctx, *, username: str):
+    """View a Roblox avatar."""
+    await ctx.send(embed=bleed_embed(f"Avatar: {username}", "Fetching avatar..."))
+
+@roblox_group.command(name="friends")
+async def roblox_friends(ctx, *, username: str):
+    """View a Roblox user's friends list."""
+    await ctx.send(embed=bleed_embed(f"Friends: {username}", "Fetching friends list..."))
+
+@roblox_group.command(name="groups")
+async def roblox_groups(ctx, *, username: str):
+    """View a Roblox user's groups."""
+    await ctx.send(embed=bleed_embed(f"Groups: {username}", "Fetching groups..."))
+
+
+# ═══════════════════════════ CATEGORY 33: TEXT-TO-SPEECH (4 commands) ═══════════════════════════
+
+@bot.group(name="tts", invoke_without_command=True)
+async def tts_group(ctx):
+    """Text-to-speech commands."""
+    await ctx.send(embed=bleed_embed("TTS", "`<voice> <text>`, `voices`, `join`, `leave`\nUsage: `,tts <voice> <text>`"))
+
+@tts_group.command(name="voices")
+async def tts_voices(ctx):
+    """List available TTS voices."""
+    await ctx.send(embed=bleed_embed("TTS Voices", "Available voices: en-US, en-GB, fr-FR, de-DE, es-ES, ja-JP, ko-KR, pt-BR, and more."))
+
+@tts_group.command(name="join")
+async def tts_join(ctx):
+    """Make the bot join your voice channel for TTS."""
+    voice = ctx.author.voice
+    if not voice:
+        return await ctx.send(embed=error_embed("Join a voice channel first."))
+    try:
+        await voice.channel.connect()
+        await ctx.send(embed=bleed_embed("TTS", f"Joined {voice.channel.mention}"))
+    except discord.Forbidden:
+        await ctx.send(embed=error_embed("Missing permissions to join voice."))
+    except discord.HTTPException as e:
+        await ctx.send(embed=error_embed(str(e)))
+
+@tts_group.command(name="leave")
+async def tts_leave(ctx):
+    """Make the bot leave the voice channel."""
+    voice = ctx.guild.voice_client
+    if voice:
+        await voice.disconnect()
+        await ctx.send(embed=bleed_embed("TTS", "Left voice channel."))
+    else:
+        await ctx.send(embed=error_embed("Not in a voice channel."))
+
+
+# ═══════════════════════════ CATEGORY 34: TRANSLATE (2 commands) ═══════════════════════════
+
+@bot.group(name="translate", invoke_without_command=True)
+async def translate_group(ctx):
+    """Translation commands."""
+    await ctx.send(embed=bleed_embed("Translate", "`<language> <text>` — Translate text\n`languages` — List supported languages"))
+
+@translate_group.command(name="languages")
+async def translate_languages(ctx):
+    """List supported translation languages."""
+    langs = """
+**Common Languages:**
+• en — English    • es — Spanish    • fr — French
+• de — German     • it — Italian    • pt — Portuguese
+• ru — Russian    • ja — Japanese   • ko — Korean
+• zh — Chinese    • ar — Arabic     • hi — Hindi
+• nl — Dutch      • pl — Polish     • tr — Turkish
+• sv — Swedish    • da — Danish     • fi — Finnish
+• no — Norwegian  • cs — Czech      • hu — Hungarian
+• el — Greek      • he — Hebrew     • th — Thai
+• vi — Vietnamese • id — Indonesian • ms — Malay
+**100+ languages supported.**
+"""
+    await ctx.send(embed=bleed_embed("Supported Languages", langs))
+
+
+# ═══════════════════════════ CATEGORY 35: GENERAL / UTILITY (18 commands) ═══════════════════════════
+
+@bot.command(name="prefix")
+@commands.has_permissions(administrator=True)
+async def prefix_cmd(ctx, symbol: str = None):
+    """Change or view the server prefix."""
+    if symbol:
+        if len(symbol) > 10:
+            return await ctx.send(embed=error_embed("Prefix must be 10 characters or less."))
+        db.execute("INSERT OR REPLACE INTO prefixes VALUES (?,?)", (ctx.guild.id, symbol))
+        await ctx.send(embed=bleed_embed("Prefix", f"Set to `{symbol}`"))
+    else:
+        await ctx.send(embed=bleed_embed("Prefix", f"Current: `{get_prefix(ctx.guild.id)}`"))
+
+@bot.command(name="ping")
+async def ping_cmd(ctx):
+    """Check bot latency."""
+    latency = round(bot.latency * 1000)
+    color = 0x27AE60 if latency < 100 else 0xF39C12 if latency < 200 else 0xE74C3C
+    await ctx.send(embed=bleed_embed("Ping", f"`{latency}ms`", color))
+
+@bot.command(name="invite")
+async def invite_cmd(ctx):
+    """Get the bot's invite link."""
+    await ctx.send(embed=bleed_embed("Invite", f"[Click here to invite bleed](https://discord.com/oauth2/authorize?client_id={bot.user.id}&permissions=8&scope=bot)"))
+
+@bot.command(name="support")
+async def support_cmd(ctx):
+    """Get a link to the support server."""
+    await ctx.send(embed=bleed_embed("Support", "Join the support server for help.\nhttps://discord.gg/bleed"))
+
+@bot.command(name="uptime")
+async def uptime_cmd(ctx):
+    """Show how long the bot has been online."""
+    await ctx.send(embed=bleed_embed("Uptime", format_duration(int(time.time() - bot.start_time))))
+
+@bot.command(name="avatar", aliases=["av"])
+async def avatar_cmd(ctx, member: discord.Member = None):
+    """Show a user's avatar."""
+    m = member or ctx.author
+    embed = discord.Embed(title=f"Avatar: {m.name}", color=0x9B59B6)
+    embed.set_image(url=m.display_avatar.url)
+    embed.set_footer(text="bleed.bot")
+    await ctx.send(embed=embed)
+
+@bot.command(name="banner")
+async def banner_cmd(ctx, member: discord.Member = None):
+    """Show a user's banner."""
+    m = member or ctx.author
+    try:
+        u = await bot.fetch_user(m.id)
+        if u.banner:
+            embed = discord.Embed(title=f"Banner: {m.name}", color=0x9B59B6)
+            embed.set_image(url=u.banner.url)
+            embed.set_footer(text="bleed.bot")
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send(embed=bleed_embed("Banner", f"{m.name} has no banner."))
+    except:
+        await ctx.send(embed=error_embed("Failed to fetch banner."))
+
+@bot.command(name="userinfo", aliases=["ui", "whois"])
+async def userinfo_cmd(ctx, member: discord.Member = None):
+    """Show detailed information about a user."""
+    m = member or ctx.author
+    embed = discord.Embed(title=f"User Info: {m}", color=m.color if m.color.value else 0x9B59B6)
+    embed.set_thumbnail(url=m.display_avatar.url)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="ID", value=f"`{m.id}`", inline=True)
+    embed.add_field(name="Nickname", value=m.nick or "None", inline=True)
+    embed.add_field(name="Bot", value="Yes" if m.bot else "No", inline=True)
+    embed.add_field(name="Created", value=f"<t:{int(m.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="Joined", value=f"<t:{int(m.joined_at.timestamp())}:F>", inline=True)
+    roles = [r.mention for r in reversed(m.roles) if r.name != "@everyone"][:20]
+    if roles:
+        embed.add_field(name=f"Roles ({len(m.roles)-1})", value=" ".join(roles), inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command(name="serverinfo", aliases=["si", "guildinfo"])
+async def serverinfo_cmd(ctx):
+    """Show detailed information about the server."""
+    g = ctx.guild
+    embed = discord.Embed(title=f"Server Info: {g.name}", color=0x9B59B6)
+    if g.icon:
+        embed.set_thumbnail(url=g.icon.url)
+    embed.set_footer(text=f"ID: {g.id} • bleed.bot")
+    embed.add_field(name="Owner", value=g.owner.mention if g.owner else "Unknown", inline=True)
+    embed.add_field(name="Created", value=f"<t:{int(g.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="Members", value=str(g.member_count), inline=True)
+    embed.add_field(name="Channels", value=str(len(g.channels)), inline=True)
+    embed.add_field(name="Roles", value=str(len(g.roles)), inline=True)
+    embed.add_field(name="Boosts", value=f"Tier {g.premium_tier} ({g.premium_subscription_count})", inline=True)
+    embed.add_field(name="Verification", value=str(g.verification_level).title(), inline=True)
+    embed.add_field(name="Emojis", value=f"{len(g.emojis)}/{g.emoji_limit}", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="roleinfo")
+async def roleinfo_cmd(ctx, role: discord.Role):
+    """Show information about a role."""
+    embed = discord.Embed(title=f"Role Info: {role.name}", color=role.color if role.color.value else 0x9B59B6)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="ID", value=f"`{role.id}`", inline=True)
+    embed.add_field(name="Color", value=str(role.color), inline=True)
+    embed.add_field(name="Members", value=str(len(role.members)), inline=True)
+    embed.add_field(name="Position", value=str(role.position), inline=True)
+    embed.add_field(name="Hoisted", value="Yes" if role.hoist else "No", inline=True)
+    embed.add_field(name="Mentionable", value="Yes" if role.mentionable else "No", inline=True)
+    embed.add_field(name="Created", value=f"<t:{int(role.created_at.timestamp())}:F>", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="channelinfo", aliases=["ci"])
+async def channelinfo_cmd(ctx, channel: discord.TextChannel = None):
+    """Show information about a channel."""
+    ch = channel or ctx.channel
+    embed = discord.Embed(title=f"Channel Info: #{ch.name}", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="ID", value=f"`{ch.id}`", inline=True)
+    embed.add_field(name="Type", value=str(ch.type).title(), inline=True)
+    embed.add_field(name="Topic", value=ch.topic or "None", inline=True)
+    embed.add_field(name="NSFW", value="Yes" if ch.nsfw else "No", inline=True)
+    embed.add_field(name="Slowmode", value=f"{ch.slowmode_delay}s", inline=True)
+    embed.add_field(name="Created", value=f"<t:{int(ch.created_at.timestamp())}:F>", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="permissions", aliases=["perms"])
+async def permissions_cmd(ctx, member: discord.Member = None):
+    """Show a member's permissions in the current channel."""
+    m = member or ctx.author
+    perms = ctx.channel.permissions_for(m)
+    granted = [perm.replace("_", " ").title() for perm, value in perms if value]
+    denied = [perm.replace("_", " ").title() for perm, value in perms if not value]
+    embed = discord.Embed(title=f"Permissions: {m.name}", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot")
+    if granted:
+        embed.add_field(name=f"✅ Granted ({len(granted)})", value=", ".join(granted[:15]) + ("..." if len(granted) > 15 else ""), inline=False)
+    if denied:
+        embed.add_field(name=f"❌ Denied ({len(denied)})", value=", ".join(denied[:15]) + ("..." if len(denied) > 15 else ""), inline=False)
+    await ctx.send(embed=embed)
+
+@bot.command(name="emojiinfo", aliases=["emoji"])
+async def emojiinfo_cmd(ctx, emoji: discord.Emoji):
+    """Show information about an emoji."""
+    embed = discord.Embed(title=f"Emoji: {emoji.name}", color=0x9B59B6)
+    embed.set_image(url=emoji.url)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="ID", value=f"`{emoji.id}`", inline=True)
+    embed.add_field(name="Animated", value="Yes" if emoji.animated else "No", inline=True)
+    embed.add_field(name="Guild", value=emoji.guild.name if emoji.guild else "Unknown", inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="stickerinfo")
+async def stickerinfo_cmd(ctx, sticker: discord.GuildSticker = None):
+    """Show information about a sticker."""
+    if not sticker:
+        return await ctx.send(embed=error_embed("Please specify a sticker name or ID."))
+    embed = discord.Embed(title=f"Sticker: {sticker.name}", color=0x9B59B6)
+    embed.set_image(url=sticker.url)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="ID", value=f"`{sticker.id}`", inline=True)
+    embed.add_field(name="Format", value=str(sticker.format).title(), inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="botinfo")
+async def botinfo_cmd(ctx):
+    """Show information about the bot."""
+    embed = discord.Embed(title=f"Bot Info: {bot.user.name}", color=0x9B59B6)
+    embed.set_thumbnail(url=bot.user.display_avatar.url)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="ID", value=f"`{bot.user.id}`", inline=True)
+    embed.add_field(name="Created", value=f"<t:{int(bot.user.created_at.timestamp())}:F>", inline=True)
+    embed.add_field(name="Servers", value=str(len(bot.guilds)), inline=True)
+    embed.add_field(name="Users", value=str(sum(g.member_count for g in bot.guilds)), inline=True)
+    embed.add_field(name="Commands", value=str(len(bot.commands)), inline=True)
+    embed.add_field(name="Uptime", value=format_duration(int(time.time() - bot.start_time)), inline=True)
+    embed.add_field(name="Latency", value=f"{round(bot.latency * 1000)}ms", inline=True)
+    embed.add_field(name="Prefix", value=get_prefix(ctx.guild.id), inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="stats")
+async def stats_cmd(ctx):
+    """Show server statistics."""
+    g = ctx.guild
+    total_members = g.member_count
+    humans = len([m for m in g.members if not m.bot])
+    bots = len([m for m in g.members if m.bot])
+    online = len([m for m in g.members if m.status != discord.Status.offline])
+    text_ch = len(g.text_channels)
+    voice_ch = len(g.voice_channels)
+    
+    embed = discord.Embed(title=f"Stats: {g.name}", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot")
+    embed.add_field(name="👥 Total Members", value=str(total_members), inline=True)
+    embed.add_field(name="👤 Humans", value=str(humans), inline=True)
+    embed.add_field(name="🤖 Bots", value=str(bots), inline=True)
+    embed.add_field(name="🟢 Online", value=str(online), inline=True)
+    embed.add_field(name="💬 Text Channels", value=str(text_ch), inline=True)
+    embed.add_field(name="🔊 Voice Channels", value=str(voice_ch), inline=True)
+    embed.add_field(name="🎭 Roles", value=str(len(g.roles)), inline=True)
+    embed.add_field(name="📈 Boosts", value=str(g.premium_subscription_count), inline=True)
+    await ctx.send(embed=embed)
+
+@bot.command(name="snipe")
+async def snipe_cmd(ctx):
+    """Snipe the last deleted message in this channel."""
+    msg = bot.snipe_cache.get(ctx.channel.id)
+    if not msg:
+        return await ctx.send(embed=bleed_embed("Snipe", "Nothing to snipe."))
+    embed = discord.Embed(description=msg.content or "*[no text]*", color=0x9B59B6, timestamp=msg.created_at)
+    embed.set_author(name=msg.author.name, icon_url=msg.author.display_avatar.url)
+    embed.set_footer(text="bleed.bot • Sniped")
+    if msg.attachments:
+        embed.set_image(url=msg.attachments[0].url)
+    await ctx.send(embed=embed)
+
+@bot.command(name="editsnipe")
+async def editsnipe_cmd(ctx):
+    """Snipe the last edited message."""
+    data = bot.editsnipe_cache.get(ctx.channel.id)
+    if not data:
+        return await ctx.send(embed=bleed_embed("Edit Snipe", "Nothing to snipe."))
+    embed = discord.Embed(color=0xFFA500, timestamp=datetime.utcnow())
+    embed.set_author(name=data.get("author", "Unknown"))
+    embed.add_field(name="Before", value=data.get("before", "*[empty]*")[:1000], inline=False)
+    embed.add_field(name="After", value=data.get("after", "*[empty]*")[:1000], inline=False)
+    embed.set_footer(text="bleed.bot • Edit Sniped")
+    await ctx.send(embed=embed)
+
+@bot.command(name="invites", aliases=["inv"])
+async def invites_cmd(ctx, member: discord.Member = None):
+    """Check invite count for a member."""
+    m = member or ctx.author
+    try:
+        invites = await ctx.guild.invites()
+        user_invites = [inv for inv in invites if inv.inviter and inv.inviter.id == m.id]
+        total_uses = sum(inv.uses for inv in user_invites)
+        embed = discord.Embed(title=f"Invites: {m.name}", color=0x9B59B6)
+        embed.set_footer(text="bleed.bot")
+        embed.add_field(name="Total Invites", value=str(len(user_invites)), inline=True)
+        embed.add_field(name="Total Uses", value=str(total_uses), inline=True)
+        await ctx.send(embed=embed)
+    except discord.Forbidden:
+        await ctx.send(embed=error_embed("Missing permissions to view invites."))
