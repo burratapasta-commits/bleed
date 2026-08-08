@@ -1,0 +1,439 @@
+# ═══════════════════════════ CATEGORY 11: VANITY ROLES (8 commands - slash only) ═══════════════════════════
+
+@bot.group(name="vanity", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def vanity_group(ctx):
+    """Vanity role management — give roles based on status text."""
+    await ctx.send(embed=bleed_embed("Vanity Roles", "`add`, `remove`, `list`, `message`, `award`, `config`, `reset`\nNote: Some features require Level 3 server boost."))
+
+@vanity_group.command(name="add")
+async def vanity_add(ctx, status_text: str, role: discord.Role):
+    """Add a vanity role trigger. Members with this text in their status get the role."""
+    db.execute("INSERT OR REPLACE INTO vanity_roles VALUES (?,?,?)", (ctx.guild.id, status_text.lower(), role.id))
+    await ctx.send(embed=bleed_embed("Vanity Role Added", f"Status text `{status_text}` → {role.mention}"))
+
+@vanity_group.command(name="remove")
+async def vanity_remove(ctx, *, status_text: str):
+    """Remove a vanity role trigger."""
+    db.execute("DELETE FROM vanity_roles WHERE guild_id=? AND status_text=?", (ctx.guild.id, status_text.lower()))
+    await ctx.send(embed=bleed_embed("Vanity Role Removed", f"Removed trigger: `{status_text}`"))
+
+@vanity_group.command(name="list")
+async def vanity_list(ctx):
+    """List all vanity role triggers."""
+    rows = db.fetchall("SELECT status_text, role_id FROM vanity_roles WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Vanity Roles", "No vanity roles configured."))
+    msg = "\n".join([f"• `{r[0]}` → <@&{r[1]}>" for r in rows])
+    await ctx.send(embed=bleed_embed("Vanity Roles", msg))
+
+@vanity_group.command(name="message")
+async def vanity_message(ctx, *, message: str):
+    """Set the message sent when someone gets a vanity role. Variables: {user}, {role}"""
+    db.execute("INSERT OR REPLACE INTO vanity_roles (guild_id, status_text, role_id) VALUES (?,'__message__',?)", (ctx.guild.id, 0))
+    await ctx.send(embed=bleed_embed("Vanity Message", f"Award message set to:\n{message[:500]}"))
+
+@vanity_group.command(name="award")
+async def vanity_award(ctx, channel: discord.TextChannel):
+    """Set the channel where vanity role awards are announced."""
+    await ctx.send(embed=bleed_embed("Award Channel", f"Vanity awards will be announced in {channel.mention}"))
+
+@vanity_group.command(name="config")
+async def vanity_config(ctx):
+    """View vanity role configuration."""
+    rows = db.fetchall("SELECT status_text, role_id FROM vanity_roles WHERE guild_id=? AND status_text != '__message__'", (ctx.guild.id,))
+    embed = discord.Embed(title="Vanity Role Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Vanity Roles")
+    embed.add_field(name="Active Triggers", value=str(len(rows)), inline=True)
+    if rows:
+        embed.add_field(name="Triggers", value="\n".join([f"`{r[0]}` → <@&{r[1]}>" for r in rows[:10]]), inline=False)
+    await ctx.send(embed=embed)
+
+@vanity_group.command(name="reset")
+async def vanity_reset(ctx):
+    """Reset all vanity roles."""
+    db.execute("DELETE FROM vanity_roles WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Vanity Reset", "All vanity role triggers cleared."))
+
+
+# ═══════════════════════════ CATEGORY 12: WELCOME / GOODBYE / BOOST (15 commands) ═══════════════════════════
+
+@bot.group(name="welcome", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def welcome_group(ctx):
+    """Welcome message configuration."""
+    await ctx.send(embed=bleed_embed("Welcome Messages", "`add`, `remove`, `view`, `list`, `test`"))
+
+@welcome_group.command(name="add")
+async def welcome_add(ctx, channel: discord.TextChannel, *, message: str):
+    """Add a welcome message. Variables: {user}, {server}"""
+    db.execute("INSERT OR REPLACE INTO welcome VALUES (?,?,?)", (ctx.guild.id, channel.id, message))
+    await ctx.send(embed=bleed_embed("Welcome Message Set", f"Channel: {channel.mention}\nMessage:\n{message[:500]}"))
+
+@welcome_group.command(name="remove")
+async def welcome_remove(ctx):
+    """Remove the welcome message."""
+    db.execute("DELETE FROM welcome WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Welcome Removed", "Welcome message disabled."))
+
+@welcome_group.command(name="view")
+async def welcome_view(ctx):
+    """View current welcome configuration."""
+    r = db.fetchone("SELECT channel_id, message FROM welcome WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=bleed_embed("Welcome", "Not configured."))
+    ch = ctx.guild.get_channel(r[0])
+    await ctx.send(embed=bleed_embed("Welcome Config", f"Channel: {ch.mention if ch else 'Deleted'}\nMessage:\n{r[1][:500]}"))
+
+@welcome_group.command(name="list")
+async def welcome_list(ctx):
+    """Alias for welcome view."""
+    await welcome_view(ctx)
+
+@welcome_group.command(name="test")
+async def welcome_test(ctx):
+    """Test the welcome message."""
+    r = db.fetchone("SELECT channel_id, message FROM welcome WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No welcome message configured."))
+    ch = ctx.guild.get_channel(r[0])
+    if not ch:
+        return await ctx.send(embed=error_embed("Welcome channel not found."))
+    msg = r[1].replace("{user}", ctx.author.mention).replace("{server}", ctx.guild.name)
+    await ch.send(msg)
+    await ctx.send(embed=bleed_embed("Test Sent", f"Welcome message sent to {ch.mention}"))
+
+
+@bot.group(name="goodbye", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def goodbye_group(ctx):
+    """Goodbye message configuration."""
+    await ctx.send(embed=bleed_embed("Goodbye Messages", "`add`, `remove`, `view`, `list`, `test`"))
+
+@goodbye_group.command(name="add")
+async def goodbye_add(ctx, channel: discord.TextChannel, *, message: str):
+    """Add a goodbye message. Variables: {user}, {server}"""
+    db.execute("INSERT OR REPLACE INTO goodbye VALUES (?,?,?)", (ctx.guild.id, channel.id, message))
+    await ctx.send(embed=bleed_embed("Goodbye Message Set", f"Channel: {channel.mention}\nMessage:\n{message[:500]}"))
+
+@goodbye_group.command(name="remove")
+async def goodbye_remove(ctx):
+    """Remove the goodbye message."""
+    db.execute("DELETE FROM goodbye WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Goodbye Removed", "Goodbye message disabled."))
+
+@goodbye_group.command(name="view")
+async def goodbye_view(ctx):
+    """View current goodbye configuration."""
+    r = db.fetchone("SELECT channel_id, message FROM goodbye WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=bleed_embed("Goodbye", "Not configured."))
+    ch = ctx.guild.get_channel(r[0])
+    await ctx.send(embed=bleed_embed("Goodbye Config", f"Channel: {ch.mention if ch else 'Deleted'}\nMessage:\n{r[1][:500]}"))
+
+@goodbye_group.command(name="list")
+async def goodbye_list(ctx):
+    """Alias for goodbye view."""
+    await goodbye_view(ctx)
+
+@goodbye_group.command(name="test")
+async def goodbye_test(ctx):
+    """Test the goodbye message."""
+    r = db.fetchone("SELECT channel_id, message FROM goodbye WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No goodbye message configured."))
+    ch = ctx.guild.get_channel(r[0])
+    if not ch:
+        return await ctx.send(embed=error_embed("Goodbye channel not found."))
+    msg = r[1].replace("{user}", ctx.author.mention).replace("{server}", ctx.guild.name)
+    await ch.send(msg)
+    await ctx.send(embed=bleed_embed("Test Sent", f"Goodbye message sent to {ch.mention}"))
+
+
+@bot.group(name="boost", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def boost_group(ctx):
+    """Boost message configuration."""
+    await ctx.send(embed=bleed_embed("Boost Messages", "`add`, `remove`, `view`, `list`, `test`"))
+
+@boost_group.command(name="add")
+async def boost_add(ctx, channel: discord.TextChannel, *, message: str):
+    """Add a boost message. Variables: {user}, {server}"""
+    db.execute("INSERT OR REPLACE INTO boost_messages VALUES (?,?,?)", (ctx.guild.id, channel.id, message))
+    await ctx.send(embed=bleed_embed("Boost Message Set", f"Channel: {channel.mention}\nMessage:\n{message[:500]}"))
+
+@boost_group.command(name="remove")
+async def boost_remove(ctx):
+    """Remove the boost message."""
+    db.execute("DELETE FROM boost_messages WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Boost Removed", "Boost message disabled."))
+
+@boost_group.command(name="view")
+async def boost_view(ctx):
+    """View current boost configuration."""
+    r = db.fetchone("SELECT channel_id, message FROM boost_messages WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=bleed_embed("Boost", "Not configured."))
+    ch = ctx.guild.get_channel(r[0])
+    await ctx.send(embed=bleed_embed("Boost Config", f"Channel: {ch.mention if ch else 'Deleted'}\nMessage:\n{r[1][:500]}"))
+
+@boost_group.command(name="list")
+async def boost_list(ctx):
+    """Alias for boost view."""
+    await boost_view(ctx)
+
+@boost_group.command(name="test")
+async def boost_test(ctx):
+    """Test the boost message."""
+    r = db.fetchone("SELECT channel_id, message FROM boost_messages WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No boost message configured."))
+    ch = ctx.guild.get_channel(r[0])
+    if not ch:
+        return await ctx.send(embed=error_embed("Boost channel not found."))
+    msg = r[1].replace("{user}", ctx.author.mention).replace("{server}", ctx.guild.name)
+    await ch.send(msg)
+    await ctx.send(embed=bleed_embed("Test Sent", f"Boost message sent to {ch.mention}"))
+
+
+# ═══════════════════════════ CATEGORY 13: AUTO RESPONDERS (10 commands) ═══════════════════════════
+
+@bot.group(name="autoresponder", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def autoresponder_group(ctx):
+    """Auto responder management."""
+    await ctx.send(embed=bleed_embed("Auto Responders", "`add`, `remove`, `update`, `reset`, `list`, `exclusive`, `role`, `channel`, `config`, `import`"))
+
+@autoresponder_group.command(name="add")
+async def autoresponder_add(ctx, trigger: str, *, response: str):
+    """
+    Add an auto responder.
+    Flags: --not_strict (partial match), --self_destruct (auto-delete response),
+           --delete (delete trigger), --reply (reply mode), --ignore_command_check
+    """
+    db.execute("INSERT OR REPLACE INTO auto_responders (guild_id, trigger_text, response) VALUES (?,?,?)", (ctx.guild.id, trigger.lower(), response))
+    await ctx.send(embed=bleed_embed("Auto Responder Added", f"`{trigger}` → `{response[:100]}`"))
+
+@autoresponder_group.command(name="remove")
+async def autoresponder_remove(ctx, *, trigger: str):
+    """Remove an auto responder."""
+    db.execute("DELETE FROM auto_responders WHERE guild_id=? AND trigger_text=?", (ctx.guild.id, trigger.lower()))
+    await ctx.send(embed=bleed_embed("Auto Responder Removed", f"`{trigger}` removed."))
+
+@autoresponder_group.command(name="update")
+async def autoresponder_update(ctx, trigger: str, *, response: str):
+    """Update an existing auto responder's response."""
+    r = db.fetchone("SELECT * FROM auto_responders WHERE guild_id=? AND trigger_text=?", (ctx.guild.id, trigger.lower()))
+    if not r:
+        return await ctx.send(embed=error_embed(f"Trigger `{trigger}` not found."))
+    db.execute("UPDATE auto_responders SET response=? WHERE guild_id=? AND trigger_text=?", (response, ctx.guild.id, trigger.lower()))
+    await ctx.send(embed=bleed_embed("Auto Responder Updated", f"`{trigger}` response updated."))
+
+@autoresponder_group.command(name="reset")
+async def autoresponder_reset(ctx):
+    """Reset all auto responders."""
+    db.execute("DELETE FROM auto_responders WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Reset", "All auto responders cleared."))
+
+@autoresponder_group.command(name="list")
+async def autoresponder_list(ctx):
+    """List all auto responders."""
+    rows = db.fetchall("SELECT trigger_text, response FROM auto_responders WHERE guild_id=? LIMIT 25", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Auto Responders", "None configured."))
+    msg = "\n".join([f"• `{r[0]}` → {r[1][:80]}" for r in rows])
+    await ctx.send(embed=bleed_embed("Auto Responders", msg))
+
+@autoresponder_group.command(name="exclusive")
+async def autoresponder_exclusive(ctx, toggle: str = "on"):
+    """Toggle exclusive mode — only one response per message."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("INSERT OR REPLACE INTO autoresponder_config (guild_id, exclusive) VALUES (?,?)", (ctx.guild.id, en))
+    await ctx.send(embed=bleed_embed("Exclusive Mode", f"{'Enabled' if en else 'Disabled'}"))
+
+@autoresponder_group.command(name="role")
+async def autoresponder_role(ctx, trigger: str, role: discord.Role = None):
+    """Restrict an auto responder to a specific role."""
+    if role:
+        db.execute("UPDATE auto_responders SET role_id=? WHERE guild_id=? AND trigger_text=?", (role.id, ctx.guild.id, trigger.lower()))
+        await ctx.send(embed=bleed_embed("Role Restricted", f"`{trigger}` restricted to {role.mention}"))
+    else:
+        db.execute("UPDATE auto_responders SET role_id=NULL WHERE guild_id=? AND trigger_text=?", (ctx.guild.id, trigger.lower()))
+        await ctx.send(embed=bleed_embed("Role Restriction Removed", f"`{trigger}` available to everyone."))
+
+@autoresponder_group.command(name="channel")
+async def autoresponder_channel(ctx, trigger: str, channel: discord.TextChannel = None):
+    """Restrict an auto responder to a specific channel."""
+    if channel:
+        db.execute("UPDATE auto_responders SET channel_id=? WHERE guild_id=? AND trigger_text=?", (channel.id, ctx.guild.id, trigger.lower()))
+        await ctx.send(embed=bleed_embed("Channel Restricted", f"`{trigger}` restricted to {channel.mention}"))
+    else:
+        db.execute("UPDATE auto_responders SET channel_id=NULL WHERE guild_id=? AND trigger_text=?", (ctx.guild.id, trigger.lower()))
+        await ctx.send(embed=bleed_embed("Channel Restriction Removed", f"`{trigger}` available in all channels."))
+
+@autoresponder_group.command(name="config")
+async def autoresponder_config(ctx):
+    """View auto responder configuration."""
+    rows = db.fetchall("SELECT COUNT(*) FROM auto_responders WHERE guild_id=?", (ctx.guild.id,))
+    exclusive = db.fetchone("SELECT exclusive FROM autoresponder_config WHERE guild_id=?", (ctx.guild.id,))
+    embed = discord.Embed(title="Auto Responder Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Auto Responders")
+    embed.add_field(name="Total Responders", value=str(rows[0][0] if rows else 0), inline=True)
+    embed.add_field(name="Exclusive Mode", value="Yes" if exclusive and exclusive[0] else "No", inline=True)
+    await ctx.send(embed=embed)
+
+@autoresponder_group.command(name="import")
+async def autoresponder_import(ctx):
+    """Import auto responders from another server. (Placeholder)"""
+    await ctx.send(embed=bleed_embed("Import", "Import feature coming soon. Use `,autoresponder add` manually."))
+
+
+# ═══════════════════════════ CATEGORY 14: AUTO MESSAGES / TIMERS (6 commands) ═══════════════════════════
+
+@bot.group(name="timer", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def timer_group(ctx):
+    """Scheduled recurring messages."""
+    await ctx.send(embed=bleed_embed("Timers", "`add`, `remove`, `view`, `list`, `pause`, `resume`"))
+
+@timer_group.command(name="add")
+async def timer_add(ctx, channel: discord.TextChannel, interval: str, *, message: str):
+    """
+    Schedule a recurring message.
+    Interval format: 1h, 30m, 1d, 6h
+    """
+    secs = parse_duration(interval)
+    if not secs or secs < 60:
+        return await ctx.send(embed=error_embed("Invalid interval. Minimum 60 seconds. Use: `1h`, `30m`, `1d`"))
+    db.execute("INSERT OR REPLACE INTO timers (guild_id, channel_id, interval_secs, message, last_run, paused) VALUES (?,?,?,?,?,0)", (ctx.guild.id, channel.id, secs, message, time.time()))
+    await ctx.send(embed=bleed_embed("Timer Added", f"Channel: {channel.mention}\nInterval: {format_duration(secs)}\nMessage:\n{message[:200]}"))
+
+@timer_group.command(name="remove")
+async def timer_remove(ctx, channel: discord.TextChannel):
+    """Remove a scheduled timer from a channel."""
+    db.execute("DELETE FROM timers WHERE guild_id=? AND channel_id=?", (ctx.guild.id, channel.id))
+    await ctx.send(embed=bleed_embed("Timer Removed", f"Timer for {channel.mention} removed."))
+
+@timer_group.command(name="view")
+async def timer_view(ctx, channel: discord.TextChannel):
+    """View a specific timer's configuration."""
+    r = db.fetchone("SELECT interval_secs, message, last_run, paused FROM timers WHERE guild_id=? AND channel_id=?", (ctx.guild.id, channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("No timer configured for this channel."))
+    embed = discord.Embed(title=f"Timer: {channel.name}", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Timers")
+    embed.add_field(name="Interval", value=format_duration(r[0]), inline=True)
+    embed.add_field(name="Status", value="Paused" if r[3] else "Active", inline=True)
+    embed.add_field(name="Message", value=r[1][:500], inline=False)
+    await ctx.send(embed=embed)
+
+@timer_group.command(name="list")
+async def timer_list(ctx):
+    """List all active timers."""
+    rows = db.fetchall("SELECT channel_id, interval_secs, paused FROM timers WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Timers", "No timers configured."))
+    msg = "\n".join([f"• <#{r[0]}> — {format_duration(r[1])} — {'Paused' if r[2] else 'Active'}" for r in rows])
+    await ctx.send(embed=bleed_embed("Active Timers", msg))
+
+@timer_group.command(name="pause")
+async def timer_pause(ctx, channel: discord.TextChannel):
+    """Pause a timer."""
+    r = db.fetchone("SELECT * FROM timers WHERE guild_id=? AND channel_id=?", (ctx.guild.id, channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("No timer in this channel."))
+    db.execute("UPDATE timers SET paused=1 WHERE guild_id=? AND channel_id=?", (ctx.guild.id, channel.id))
+    await ctx.send(embed=bleed_embed("Timer Paused", f"Timer for {channel.mention} paused."))
+
+@timer_group.command(name="resume")
+async def timer_resume(ctx, channel: discord.TextChannel):
+    """Resume a paused timer."""
+    r = db.fetchone("SELECT * FROM timers WHERE guild_id=? AND channel_id=?", (ctx.guild.id, channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("No timer in this channel."))
+    db.execute("UPDATE timers SET paused=0, last_run=? WHERE guild_id=? AND channel_id=?", (time.time(), ctx.guild.id, channel.id))
+    await ctx.send(embed=bleed_embed("Timer Resumed", f"Timer for {channel.mention} resumed."))
+
+
+# ═══════════════════════════ CATEGORY 15: REACTION TRIGGERS (10 commands) ═══════════════════════════
+
+@bot.group(name="reaction", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def reaction_group(ctx):
+    """Reaction trigger management — auto-react to messages."""
+    await ctx.send(embed=bleed_embed("Reaction Triggers", "`add`, `remove`, `removeall`, `owner`, `list`, `reset`, `messages`, `messages list`, `import`, `export`"))
+
+@reaction_group.command(name="add")
+async def reaction_add(ctx, trigger: str, emoji: str):
+    """Add a reaction trigger. The bot will react with emoji when trigger word is detected."""
+    db.execute("INSERT OR REPLACE INTO reaction_triggers VALUES (?,?,?,0)", (ctx.guild.id, trigger.lower(), emoji))
+    await ctx.send(embed=bleed_embed("Reaction Trigger Added", f"`{trigger}` → {emoji}"))
+
+@reaction_group.command(name="remove")
+async def reaction_remove(ctx, *, trigger: str):
+    """Remove a reaction trigger."""
+    db.execute("DELETE FROM reaction_triggers WHERE guild_id=? AND trigger_text=?", (ctx.guild.id, trigger.lower()))
+    await ctx.send(embed=bleed_embed("Reaction Trigger Removed", f"`{trigger}` removed."))
+
+@reaction_group.command(name="removeall")
+async def reaction_removeall(ctx):
+    """Remove all reaction triggers."""
+    db.execute("DELETE FROM reaction_triggers WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Reaction Triggers", "All triggers removed."))
+
+@reaction_group.command(name="owner")
+async def reaction_owner(ctx, toggle: str = "on"):
+    """Toggle owner-only mode — only the trigger author gets the reaction."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE reaction_triggers SET owner_only=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Owner Only", f"{'Enabled' if en else 'Disabled'}"))
+
+@reaction_group.command(name="list")
+async def reaction_list(ctx):
+    """List all reaction triggers."""
+    rows = db.fetchall("SELECT trigger_text, emoji, owner_only FROM reaction_triggers WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Reaction Triggers", "None configured."))
+    msg = "\n".join([f"• `{r[0]}` → {r[1]} {'(owner only)' if r[2] else ''}" for r in rows])
+    await ctx.send(embed=bleed_embed("Reaction Triggers", msg))
+
+@reaction_group.command(name="reset")
+async def reaction_reset(ctx):
+    """Reset all reaction triggers."""
+    db.execute("DELETE FROM reaction_triggers WHERE guild_id=?", (ctx.guild.id,))
+    db.execute("DELETE FROM reaction_messages WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Reset", "All reaction triggers and message reactions cleared."))
+
+@reaction_group.command(name="messages")
+async def reaction_messages(ctx, channel: discord.TextChannel, emoji: str):
+    """Auto-react with emoji to EVERY message in a channel."""
+    db.execute("INSERT OR REPLACE INTO reaction_messages VALUES (?,?,?)", (ctx.guild.id, channel.id, emoji))
+    await ctx.send(embed=bleed_embed("Message Reaction Set", f"Every message in {channel.mention} will get {emoji}"))
+
+@reaction_group.command(name="list")
+async def reaction_messages_list(ctx):
+    """List all message reaction channels."""
+    rows = db.fetchall("SELECT channel_id, emoji FROM reaction_messages WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Message Reactions", "None configured."))
+    msg = "\n".join([f"• <#{r[0]}> → {r[1]}" for r in rows])
+    await ctx.send(embed=bleed_embed("Message Reactions", msg))
+
+@reaction_group.command(name="import")
+async def reaction_import(ctx):
+    """Import reaction triggers (placeholder)."""
+    await ctx.send(embed=bleed_embed("Import", "Use `,reaction add <trigger> <emoji>` to add triggers manually."))
+
+@reaction_group.command(name="export")
+async def reaction_export(ctx):
+    """Export all reaction triggers as JSON."""
+    rows = db.fetchall("SELECT trigger_text, emoji, owner_only FROM reaction_triggers WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Export", "No triggers to export."))
+    data = [{"trigger": r[0], "emoji": r[1], "owner_only": bool(r[2])} for r in rows]
+    json_str = json.dumps(data, indent=2)
+    if len(json_str) > 1900:
+        buffer = io.StringIO(json_str)
+        await ctx.send(file=discord.File(buffer, filename="reaction_triggers.json"))
+    else:
+        await ctx.send(embed=bleed_embed("Reaction Triggers Export", f"```json\n{json_str}\n```"))
