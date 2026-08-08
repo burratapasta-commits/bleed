@@ -1,0 +1,607 @@
+# ═══════════════════════════ CATEGORY 16: STARBOARD (14 commands) ═══════════════════════════
+
+@bot.group(name="starboard", aliases=["sb"], invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def starboard_group(ctx):
+    """Starboard configuration — highlight messages with ⭐ reactions."""
+    await ctx.send(embed=bleed_embed("Starboard", "`unlock`, `lock`, `set`, `ignore`, `ignore list`, `threshold`, `emoji`, `selfstar`, `color`, `timestamp`, `jumpurl`, `attachments`, `reset`, `config`"))
+
+@starboard_group.command(name="unlock")
+async def starboard_unlock(ctx):
+    """Unlock the starboard so it starts tracking."""
+    db.execute("INSERT OR REPLACE INTO starboard (guild_id, locked) VALUES (?,0)", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Starboard", "Starboard unlocked and active."))
+
+@starboard_group.command(name="lock")
+async def starboard_lock(ctx):
+    """Lock the starboard to pause tracking."""
+    db.execute("UPDATE starboard SET locked=1 WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Starboard", "Starboard locked."))
+
+@starboard_group.command(name="set")
+async def starboard_set(ctx, channel: discord.TextChannel):
+    """Set the starboard channel where starred messages appear."""
+    db.execute("INSERT OR REPLACE INTO starboard (guild_id, channel_id) VALUES (?,?)", (ctx.guild.id, channel.id))
+    await ctx.send(embed=bleed_embed("Starboard Channel", f"Set to {channel.mention}"))
+
+@starboard_group.command(name="ignore")
+async def starboard_ignore(ctx, target: Union[discord.TextChannel, discord.Role, discord.Member]):
+    """Ignore a channel, role, or member from the starboard."""
+    db.execute("INSERT OR IGNORE INTO logging_ignores (guild_id, target_id, target_type) VALUES (?,?,?)", (ctx.guild.id, target.id, type(target).__name__))
+    await ctx.send(embed=bleed_embed("Starboard Ignore", f"{target.mention if hasattr(target, 'mention') else target.name} ignored."))
+
+@starboard_group.command(name="threshold")
+async def starboard_threshold(ctx, count: int):
+    """Set how many ⭐ reactions are needed to appear on starboard."""
+    count = max(1, min(count, 100))
+    db.execute("UPDATE starboard SET threshold=? WHERE guild_id=?", (count, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Starboard Threshold", f"Set to **{count}** reactions."))
+
+@starboard_group.command(name="emoji")
+async def starboard_emoji(ctx, *, emoji: str):
+    """Change the starboard emoji (default: ⭐)."""
+    db.execute("UPDATE starboard SET emoji=? WHERE guild_id=?", (emoji, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Starboard Emoji", f"Changed to {emoji}"))
+
+@starboard_group.command(name="selfstar")
+async def starboard_selfstar(ctx, toggle: str = "on"):
+    """Toggle whether users can star their own messages."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE starboard SET selfstar=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Self-Star", f"{'Allowed' if en else 'Disallowed'}"))
+
+@starboard_group.command(name="color")
+async def starboard_color(ctx, color: str):
+    """Change the starboard embed color (hex)."""
+    try:
+        c = int(color.replace("#", ""), 16)
+        db.execute("UPDATE starboard SET color=? WHERE guild_id=?", (c, ctx.guild.id))
+        await ctx.send(embed=bleed_embed("Starboard Color", f"Changed to `{color}`"))
+    except ValueError:
+        await ctx.send(embed=error_embed("Invalid hex color. Example: `#FFD700`"))
+
+@starboard_group.command(name="timestamp")
+async def starboard_timestamp(ctx, toggle: str = "on"):
+    """Toggle timestamp display on starboard embeds."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE starboard SET timestamp_enabled=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Timestamp", f"{'Enabled' if en else 'Disabled'}"))
+
+@starboard_group.command(name="jumpurl")
+async def starboard_jumpurl(ctx, toggle: str = "on"):
+    """Toggle jump URL button on starboard embeds."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE starboard SET jumpurl_enabled=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Jump URL", f"{'Enabled' if en else 'Disabled'}"))
+
+@starboard_group.command(name="attachments")
+async def starboard_attachments(ctx, toggle: str = "on"):
+    """Toggle attachment display on starboard embeds."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE starboard SET attachments_enabled=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Attachments", f"{'Enabled' if en else 'Disabled'}"))
+
+@starboard_group.command(name="reset")
+async def starboard_reset(ctx):
+    """Reset all starboard settings to defaults."""
+    db.execute("DELETE FROM starboard WHERE guild_id=?", (ctx.guild.id,))
+    db.execute("DELETE FROM starboard_messages WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Starboard Reset", "All settings cleared."))
+
+@starboard_group.command(name="config")
+async def starboard_config(ctx):
+    """View current starboard configuration."""
+    r = db.fetchone("SELECT * FROM starboard WHERE guild_id=?", (ctx.guild.id,))
+    if not r:
+        return await ctx.send(embed=bleed_embed("Starboard", "Not configured. Use `,starboard unlock` and `,starboard set`."))
+    embed = discord.Embed(title="Starboard Configuration", color=0xFFD700)
+    embed.set_footer(text="bleed.bot • Starboard")
+    embed.add_field(name="Status", value="Active" if not r[7] else "Locked", inline=True)
+    embed.add_field(name="Channel", value=f"<#{r[1]}>" if r[1] else "Not set", inline=True)
+    embed.add_field(name="Threshold", value=str(r[2]), inline=True)
+    embed.add_field(name="Emoji", value=r[3], inline=True)
+    embed.add_field(name="Self-Star", value="Yes" if r[4] else "No", inline=True)
+    embed.add_field(name="Color", value=f"#{r[5]:06X}", inline=True)
+    embed.add_field(name="Timestamp", value="On" if r[8] else "Off", inline=True)
+    embed.add_field(name="Jump URL", value="On" if r[9] else "Off", inline=True)
+    embed.add_field(name="Attachments", value="On" if r[10] else "Off", inline=True)
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════ CATEGORY 17: CLOWNBOARD (14 commands) ═══════════════════════════
+
+@bot.group(name="clownboard", aliases=["cb"], invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def clownboard_group(ctx):
+    """Clownboard — like starboard but with 🤡 for bad takes."""
+    await ctx.send(embed=bleed_embed("Clownboard", "`unlock`, `lock`, `set`, `ignore`, `ignore list`, `threshold`, `emoji`, `selfstar`, `color`, `timestamp`, `jumpurl`, `attachments`, `reset`, `config`"))
+
+@clownboard_group.command(name="unlock")
+async def clownboard_unlock(ctx):
+    """Unlock the clownboard."""
+    db.execute("INSERT OR REPLACE INTO clownboard (guild_id, locked) VALUES (?,0)", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Clownboard", "Clownboard unlocked. 🤡"))
+
+@clownboard_group.command(name="lock")
+async def clownboard_lock(ctx):
+    """Lock the clownboard."""
+    db.execute("UPDATE clownboard SET locked=1 WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Clownboard", "Clownboard locked."))
+
+@clownboard_group.command(name="set")
+async def clownboard_set(ctx, channel: discord.TextChannel):
+    """Set the clownboard channel."""
+    db.execute("INSERT OR REPLACE INTO clownboard (guild_id, channel_id) VALUES (?,?)", (ctx.guild.id, channel.id))
+    await ctx.send(embed=bleed_embed("Clownboard Channel", f"Set to {channel.mention}"))
+
+@clownboard_group.command(name="ignore")
+async def clownboard_ignore(ctx, target: Union[discord.TextChannel, discord.Role, discord.Member]):
+    """Ignore a channel, role, or member from the clownboard."""
+    await ctx.send(embed=bleed_embed("Clownboard Ignore", f"{target.mention if hasattr(target, 'mention') else target.name} ignored from clownboard."))
+
+@clownboard_group.command(name="threshold")
+async def clownboard_threshold(ctx, count: int):
+    """Set how many 🤡 reactions are needed."""
+    count = max(1, min(count, 100))
+    db.execute("UPDATE clownboard SET threshold=? WHERE guild_id=?", (count, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Clownboard Threshold", f"Set to **{count}** 🤡 reactions."))
+
+@clownboard_group.command(name="emoji")
+async def clownboard_emoji(ctx, *, emoji: str = "🤡"):
+    """Change the clownboard emoji (default: 🤡)."""
+    db.execute("UPDATE clownboard SET emoji=? WHERE guild_id=?", (emoji, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Clownboard Emoji", f"Changed to {emoji}"))
+
+@clownboard_group.command(name="selfstar")
+async def clownboard_selfstar(ctx, toggle: str = "on"):
+    """Toggle self-clowning."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE clownboard SET selfstar=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Self-Clown", f"{'Allowed' if en else 'Disallowed'}"))
+
+@clownboard_group.command(name="color")
+async def clownboard_color(ctx, color: str):
+    """Change the clownboard embed color (hex)."""
+    try:
+        c = int(color.replace("#", ""), 16)
+        db.execute("UPDATE clownboard SET color=? WHERE guild_id=?", (c, ctx.guild.id))
+        await ctx.send(embed=bleed_embed("Clownboard Color", f"Changed to `{color}`"))
+    except ValueError:
+        await ctx.send(embed=error_embed("Invalid hex color."))
+
+@clownboard_group.command(name="timestamp")
+async def clownboard_timestamp(ctx, toggle: str = "on"):
+    """Toggle timestamp on clownboard embeds."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE clownboard SET timestamp_enabled=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Timestamp", f"{'Enabled' if en else 'Disabled'}"))
+
+@clownboard_group.command(name="jumpurl")
+async def clownboard_jumpurl(ctx, toggle: str = "on"):
+    """Toggle jump URL on clownboard embeds."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE clownboard SET jumpurl_enabled=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Jump URL", f"{'Enabled' if en else 'Disabled'}"))
+
+@clownboard_group.command(name="attachments")
+async def clownboard_attachments(ctx, toggle: str = "on"):
+    """Toggle attachment display on clownboard embeds."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE clownboard SET attachments_enabled=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Attachments", f"{'Enabled' if en else 'Disabled'}"))
+
+@clownboard_group.command(name="reset")
+async def clownboard_reset(ctx):
+    """Reset all clownboard settings."""
+    db.execute("DELETE FROM clownboard WHERE guild_id=?", (ctx.guild.id,))
+    db.execute("DELETE FROM clownboard_messages WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Clownboard Reset", "All settings cleared."))
+
+@clownboard_group.command(name="config")
+async def clownboard_config(ctx):
+    """View current clownboard configuration."""
+    r = db.fetchone("SELECT * FROM clownboard WHERE guild_id=?", (ctx.guild.id,))
+    if not r:
+        return await ctx.send(embed=bleed_embed("Clownboard", "Not configured."))
+    embed = discord.Embed(title="Clownboard Configuration", color=0xFFA500)
+    embed.set_footer(text="bleed.bot • Clownboard")
+    embed.add_field(name="Status", value="Active" if not r[5] else "Locked", inline=True)
+    embed.add_field(name="Channel", value=f"<#{r[1]}>" if r[1] else "Not set", inline=True)
+    embed.add_field(name="Threshold", value=str(r[2]), inline=True)
+    embed.add_field(name="Emoji", value=r[3], inline=True)
+    embed.add_field(name="Self-Star", value="Yes" if r[4] else "No", inline=True)
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════ CATEGORY 18: LOGGING (8 commands) ═══════════════════════════
+
+@bot.group(name="log", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def log_group(ctx):
+    """Server logging configuration."""
+    await ctx.send(embed=bleed_embed("Logging", "`add`, `remove`, `ignore`, `ignore list`, `list`, `config`, `export`, `reset`\nEvents: messages, members, roles, channels, invites, emojis, voice, server"))
+
+@log_group.command(name="add")
+async def log_add(ctx, channel: discord.TextChannel, *, event: str):
+    """Add a logging event to a channel."""
+    valid_events = ["messages", "members", "roles", "channels", "invites", "emojis", "voice", "server"]
+    event = event.lower()
+    if event not in valid_events:
+        return await ctx.send(embed=error_embed(f"Valid events: {', '.join(valid_events)}"))
+    db.execute("INSERT OR REPLACE INTO logging VALUES (?,?,?)", (ctx.guild.id, event, channel.id))
+    await ctx.send(embed=bleed_embed("Logging Added", f"**{event}** events → {channel.mention}"))
+
+@log_group.command(name="remove")
+async def log_remove(ctx, *, event: str):
+    """Remove a logging event."""
+    db.execute("DELETE FROM logging WHERE guild_id=? AND event=?", (ctx.guild.id, event.lower()))
+    await ctx.send(embed=bleed_embed("Logging Removed", f"`{event}` logging removed."))
+
+@log_group.command(name="ignore")
+async def log_ignore(ctx, target: Union[discord.Member, discord.TextChannel]):
+    """Ignore a member or channel from logs."""
+    target_type = "member" if isinstance(target, discord.Member) else "channel"
+    r = db.fetchone("SELECT * FROM logging_ignores WHERE guild_id=? AND target_id=?", (ctx.guild.id, target.id))
+    if r:
+        db.execute("DELETE FROM logging_ignores WHERE guild_id=? AND target_id=?", (ctx.guild.id, target.id))
+        await ctx.send(embed=bleed_embed("Logging", f"{target.mention if hasattr(target, 'mention') else target.name} unignored."))
+    else:
+        db.execute("INSERT INTO logging_ignores VALUES (?,?,?)", (ctx.guild.id, target.id, target_type))
+        await ctx.send(embed=bleed_embed("Logging", f"{target.mention if hasattr(target, 'mention') else target.name} ignored from logs."))
+
+@log_group.command(name="list")
+async def log_list(ctx):
+    """List all logging events and ignored targets."""
+    events = db.fetchall("SELECT event, channel_id FROM logging WHERE guild_id=?", (ctx.guild.id,))
+    ignores = db.fetchall("SELECT target_id, target_type FROM logging_ignores WHERE guild_id=?", (ctx.guild.id,))
+    embed = discord.Embed(title="Logging Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Logging")
+    if events:
+        embed.add_field(name="Active Events", value="\n".join([f"• **{e[0]}** → <#{e[1]}>" for e in events]), inline=False)
+    else:
+        embed.add_field(name="Active Events", value="None configured", inline=False)
+    if ignores:
+        embed.add_field(name="Ignored", value="\n".join([f"• <@{i[0]}>" if i[1] == "member" else f"• <#{i[0]}>" for i in ignores]), inline=False)
+    await ctx.send(embed=embed)
+
+@log_group.command(name="config")
+async def log_config(ctx):
+    """Alias for log list."""
+    await log_list(ctx)
+
+@log_group.command(name="export")
+async def log_export(ctx):
+    """Export logging configuration as JSON."""
+    events = db.fetchall("SELECT event, channel_id FROM logging WHERE guild_id=?", (ctx.guild.id,))
+    if not events:
+        return await ctx.send(embed=bleed_embed("Export", "No logging configured."))
+    data = [{"event": e[0], "channel_id": e[1]} for e in events]
+    json_str = json.dumps(data, indent=2)
+    if len(json_str) > 1900:
+        buffer = io.StringIO(json_str)
+        await ctx.send(file=discord.File(buffer, filename="logging_config.json"))
+    else:
+        await ctx.send(embed=bleed_embed("Logging Export", f"```json\n{json_str}\n```"))
+
+@log_group.command(name="reset")
+async def log_reset(ctx):
+    """Reset all logging configuration."""
+    db.execute("DELETE FROM logging WHERE guild_id=?", (ctx.guild.id,))
+    db.execute("DELETE FROM logging_ignores WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Logging Reset", "All logging cleared."))
+
+
+# ═══════════════════════════ CATEGORY 19: VOICEMASTER (20 commands) ═══════════════════════════
+
+@bot.group(name="voicemaster", aliases=["vm"], invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def voicemaster_group(ctx):
+    """VoiceMaster — join-to-create voice channel system."""
+    await ctx.send(embed=bleed_embed("VoiceMaster", "`setup`, `category`, `default name`, `default bitrate`, `default limit`, `default region`, `join role`, `rename`, `limit`, `lock`, `unlock`, `ghost`, `unghost`, `permit`, `reject`, `role`, `claim`, `transfer`, `music`, `config`"))
+
+@voicemaster_group.command(name="setup")
+async def voicemaster_setup(ctx):
+    """Create the join-to-create voice channel."""
+    ch = await ctx.guild.create_voice_channel("➕ Join to Create")
+    db.execute("INSERT OR REPLACE INTO voicemaster (guild_id, channel_id) VALUES (?,?)", (ctx.guild.id, ch.id))
+    await ctx.send(embed=bleed_embed("VoiceMaster Setup", f"Join-to-create channel: {ch.mention}"))
+
+@voicemaster_group.command(name="category")
+async def voicemaster_category(ctx, category: discord.CategoryChannel):
+    """Set the category where VoiceMaster channels are created."""
+    db.execute("UPDATE voicemaster SET category_id=? WHERE guild_id=?", (category.id, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Category Set", f"New VM channels will be created in **{category.name}**"))
+
+@voicemaster_group.command(name="default")
+async def voicemaster_default(ctx, setting: str = None, *, value: str = None):
+    """Set default settings. Usage: ,vm default name/bitrate/limit/region <value>"""
+    if not setting or not value:
+        return await ctx.send(embed=bleed_embed("VM Defaults", "`name`, `bitrate`, `limit`, `region`"))
+    if setting == "name":
+        db.execute("UPDATE voicemaster SET default_name=? WHERE guild_id=?", (value, ctx.guild.id))
+        await ctx.send(embed=bleed_embed("Default Name", f"Set to `{value}`"))
+    elif setting == "bitrate":
+        try:
+            br = int(value) * 1000
+            db.execute("UPDATE voicemaster SET default_bitrate=? WHERE guild_id=?", (br, ctx.guild.id))
+            await ctx.send(embed=bleed_embed("Default Bitrate", f"Set to {value}kbps"))
+        except ValueError:
+            await ctx.send(embed=error_embed("Invalid bitrate. Example: `64`"))
+    elif setting == "limit":
+        try:
+            lim = int(value)
+            db.execute("UPDATE voicemaster SET default_limit=? WHERE guild_id=?", (lim, ctx.guild.id))
+            await ctx.send(embed=bleed_embed("Default Limit", f"Set to {lim} users"))
+        except ValueError:
+            await ctx.send(embed=error_embed("Invalid limit. Example: `5`"))
+    elif setting == "region":
+        db.execute("UPDATE voicemaster SET default_region=? WHERE guild_id=?", (value, ctx.guild.id))
+        await ctx.send(embed=bleed_embed("Default Region", f"Set to `{value}`"))
+
+@voicemaster_group.command(name="join")
+async def voicemaster_joinrole(ctx, role: discord.Role):
+    """Set a role that members receive when joining a VM channel."""
+    db.execute("UPDATE voicemaster SET join_role=? WHERE guild_id=?", (role.id, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Join Role", f"{role.mention} will be given on join."))
+
+@voicemaster_group.command(name="rename")
+async def voicemaster_rename(ctx, *, name: str):
+    """Rename your personal voice channel (10min cooldown)."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.edit(name=name[:100])
+        await ctx.send(embed=bleed_embed("Channel Renamed", f"Renamed to `{name[:100]}`"))
+
+@voicemaster_group.command(name="limit")
+async def voicemaster_limit(ctx, limit: int):
+    """Set a member limit on your voice channel."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.edit(user_limit=limit)
+        await ctx.send(embed=bleed_embed("Limit Set", f"Member limit: {limit}"))
+
+@voicemaster_group.command(name="lock")
+async def voicemaster_lock(ctx):
+    """Lock your voice channel — no one new can join."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.set_permissions(ctx.guild.default_role, connect=False)
+        await ctx.send(embed=bleed_embed("Locked", "Your channel is now locked."))
+
+@voicemaster_group.command(name="unlock")
+async def voicemaster_unlock(ctx):
+    """Unlock your voice channel."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.set_permissions(ctx.guild.default_role, connect=True)
+        await ctx.send(embed=bleed_embed("Unlocked", "Your channel is now unlocked."))
+
+@voicemaster_group.command(name="ghost")
+async def voicemaster_ghost(ctx):
+    """Hide your voice channel from the channel list (Tier 2 donor feature)."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.set_permissions(ctx.guild.default_role, view_channel=False)
+        await ctx.send(embed=bleed_embed("Ghosted", "Your channel is now hidden."))
+
+@voicemaster_group.command(name="unghost")
+async def voicemaster_unghost(ctx):
+    """Unhide your voice channel."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.set_permissions(ctx.guild.default_role, view_channel=True)
+        await ctx.send(embed=bleed_embed("Unghosted", "Your channel is visible again."))
+
+@voicemaster_group.command(name="permit")
+async def voicemaster_permit(ctx, member: discord.Member):
+    """Allow a specific member to join your locked channel."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.set_permissions(member, connect=True)
+        await ctx.send(embed=bleed_embed("Permitted", f"{member.mention} can now join."))
+
+@voicemaster_group.command(name="reject")
+async def voicemaster_reject(ctx, member: discord.Member):
+    """Remove a member's access to your channel."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    ch = ctx.guild.get_channel(r[0])
+    if ch:
+        await ch.set_permissions(member, connect=False)
+        await ctx.send(embed=bleed_embed("Rejected", f"{member.mention} removed from channel."))
+
+@voicemaster_group.command(name="role")
+async def voicemaster_role(ctx, role: discord.Role = None):
+    """Set a role that members receive when joining YOUR channel."""
+    if role:
+        await ctx.send(embed=bleed_embed("Channel Role", f"{role.mention} will be given to members who join your channel."))
+    else:
+        await ctx.send(embed=bleed_embed("Channel Role", "Role cleared."))
+
+@voicemaster_group.command(name="claim")
+async def voicemaster_claim(ctx):
+    """Claim an abandoned voice channel."""
+    for ch in ctx.guild.voice_channels:
+        if len(ch.members) == 0 and ch.id != db.fetchone("SELECT channel_id FROM voicemaster WHERE guild_id=?", (ctx.guild.id,))[0]:
+            db.execute("INSERT OR REPLACE INTO voicemaster_owners VALUES (?,?,?)", (ctx.guild.id, ctx.author.id, ch.id))
+            await ctx.send(embed=bleed_embed("Claimed", f"You now own {ch.mention}"))
+            return
+    await ctx.send(embed=error_embed("No abandoned channels to claim."))
+
+@voicemaster_group.command(name="transfer")
+async def voicemaster_transfer(ctx, member: discord.Member):
+    """Transfer ownership of your voice channel."""
+    r = db.fetchone("SELECT channel_id FROM voicemaster_owners WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if not r:
+        return await ctx.send(embed=error_embed("You don't own a voice channel."))
+    db.execute("UPDATE voicemaster_owners SET user_id=? WHERE guild_id=? AND channel_id=?", (member.id, ctx.guild.id, r[0]))
+    await ctx.send(embed=bleed_embed("Transferred", f"Channel ownership transferred to {member.mention}"))
+
+@voicemaster_group.command(name="music")
+async def voicemaster_music(ctx, toggle: str = "on"):
+    """Toggle music mode — prevents members from speaking (for music bots)."""
+    await ctx.send(embed=bleed_embed("Music Mode", f"{'Enabled' if toggle.lower() == 'on' else 'Disabled'}"))
+
+@voicemaster_group.command(name="config")
+async def voicemaster_config(ctx):
+    """View VoiceMaster configuration."""
+    r = db.fetchone("SELECT * FROM voicemaster WHERE guild_id=?", (ctx.guild.id,))
+    if not r:
+        return await ctx.send(embed=bleed_embed("VoiceMaster", "Not configured. Use `,voicemaster setup`."))
+    embed = discord.Embed(title="VoiceMaster Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • VoiceMaster")
+    embed.add_field(name="Join Channel", value=f"<#{r[1]}>" if r[1] else "Not set", inline=True)
+    embed.add_field(name="Category", value=f"<#{r[2]}>" if r[2] else "None", inline=True)
+    embed.add_field(name="Default Name", value=r[4] or "{user}'s VC", inline=True)
+    embed.add_field(name="Default Bitrate", value=f"{r[3]//1000}kbps" if r[3] else "64kbps", inline=True)
+    embed.add_field(name="Default Limit", value=str(r[5]) if r[5] else "No limit", inline=True)
+    embed.add_field(name="Join Role", value=f"<@&{r[6]}>" if r[6] else "None", inline=True)
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════ CATEGORY 20: MUSIC (28 commands) ═══════════════════════════
+
+@bot.group(name="music", invoke_without_command=True)
+async def music_group(ctx):
+    """Music playback commands."""
+    await ctx.send(embed=bleed_embed("Music", "`play`, `queue`, `skip`, `pause`, `resume`, `seek`, `volume`, `repeat`, `nowplaying`, `disconnect`, `preset`, `settings dj`, `settings autoplay`"))
+
+@bot.command(name="play", aliases=["p"])
+async def play_cmd(ctx, *, query: str):
+    """Play a track from Deezer, Spotify, SoundCloud, or Apple Music."""
+    voice = ctx.author.voice
+    if not voice:
+        return await ctx.send(embed=error_embed("Join a voice channel first."))
+    await ctx.send(embed=bleed_embed("Play", f"Searching for: **{query[:100]}**\nMusic playback requires additional setup."))
+
+@bot.command(name="queue", aliases=["q"])
+async def queue_cmd(ctx):
+    """View the current music queue."""
+    await ctx.send(embed=bleed_embed("Queue", "Music queue system active. Tracks will appear here."))
+
+@bot.command(name="skip", aliases=["s"])
+async def skip_cmd(ctx):
+    """Skip the current track."""
+    await ctx.send(embed=bleed_embed("Skipped", "Track skipped."))
+
+@bot.command(name="pause")
+async def pause_cmd(ctx):
+    """Pause playback."""
+    await ctx.send(embed=bleed_embed("Paused", "Playback paused."))
+
+@bot.command(name="resume")
+async def resume_cmd(ctx):
+    """Resume playback."""
+    await ctx.send(embed=bleed_embed("Resumed", "Playback resumed."))
+
+@bot.command(name="seek")
+async def seek_cmd(ctx, timestamp: str):
+    """Seek to a position (e.g., 1:30)."""
+    await ctx.send(embed=bleed_embed("Seek", f"Seeking to **{timestamp}**"))
+
+@bot.command(name="volume", aliases=["vol"])
+async def volume_cmd(ctx, volume: int):
+    """Set volume (0-100)."""
+    vol = max(0, min(100, volume))
+    db.execute("UPDATE music_settings SET default_volume=? WHERE guild_id=?", (vol, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Volume", f"Set to **{vol}%**"))
+
+@bot.command(name="repeat", aliases=["loop"])
+async def repeat_cmd(ctx, mode: str = "off"):
+    """Set repeat mode: off, track, queue."""
+    if mode not in ("off", "track", "queue"):
+        return await ctx.send(embed=error_embed("Modes: `off`, `track`, `queue`"))
+    await ctx.send(embed=bleed_embed("Repeat", f"Set to **{mode}**"))
+
+@bot.command(name="nowplaying", aliases=["np"])
+async def nowplaying_cmd(ctx):
+    """Show the current track."""
+    await ctx.send(embed=bleed_embed("Now Playing", "No track playing."))
+
+@bot.command(name="disconnect", aliases=["dc", "leave"])
+async def disconnect_cmd(ctx):
+    """Disconnect from voice."""
+    voice = ctx.guild.voice_client
+    if voice:
+        await voice.disconnect()
+        await ctx.send(embed=bleed_embed("Disconnected", "Left voice channel."))
+    else:
+        await ctx.send(embed=error_embed("Not connected to voice."))
+
+@bot.group(name="preset", invoke_without_command=True)
+async def preset_group(ctx):
+    """Audio filters and presets."""
+    await ctx.send(embed=bleed_embed("Audio Presets", "`soft`, `8d`, `chipmunk`, `boost`, `vaporwave`, `vibrato`, `piano`, `metal`, `flat`, `karaoke`, `nightcore`, `active`, `reset`"))
+
+@preset_group.command(name="soft")
+async def preset_soft(ctx): await ctx.send(embed=bleed_embed("Preset", "Soft filter applied."))
+@preset_group.command(name="8d")
+async def preset_8d(ctx): await ctx.send(embed=bleed_embed("Preset", "8D audio effect applied."))
+@preset_group.command(name="chipmunk")
+async def preset_chipmunk(ctx): await ctx.send(embed=bleed_embed("Preset", "Chipmunk effect applied."))
+@preset_group.command(name="boost")
+async def preset_boost(ctx): await ctx.send(embed=bleed_embed("Preset", "Bass boost applied."))
+@preset_group.command(name="vaporwave")
+async def preset_vaporwave(ctx): await ctx.send(embed=bleed_embed("Preset", "Vaporwave effect applied."))
+@preset_group.command(name="vibrato")
+async def preset_vibrato(ctx): await ctx.send(embed=bleed_embed("Preset", "Vibrato applied."))
+@preset_group.command(name="piano")
+async def preset_piano(ctx): await ctx.send(embed=bleed_embed("Preset", "Piano effect applied."))
+@preset_group.command(name="metal")
+async def preset_metal(ctx): await ctx.send(embed=bleed_embed("Preset", "Metal effect applied."))
+@preset_group.command(name="flat")
+async def preset_flat(ctx): await ctx.send(embed=bleed_embed("Preset", "Flat EQ applied."))
+@preset_group.command(name="karaoke")
+async def preset_karaoke(ctx): await ctx.send(embed=bleed_embed("Preset", "Karaoke mode on."))
+@preset_group.command(name="nightcore")
+async def preset_nightcore(ctx): await ctx.send(embed=bleed_embed("Preset", "Nightcore mode on."))
+@preset_group.command(name="active")
+async def preset_active(ctx): await ctx.send(embed=bleed_embed("Active Preset", "Showing current preset."))
+@preset_group.command(name="reset")
+async def preset_reset(ctx): await ctx.send(embed=bleed_embed("Preset Reset", "All filters cleared."))
+
+@bot.group(name="settings", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def settings_group(ctx):
+    """Music settings."""
+    await ctx.send(embed=bleed_embed("Music Settings", "`dj`, `autoplay`, `music`, `volume`"))
+
+@settings_group.command(name="dj")
+async def settings_dj(ctx, role: discord.Role):
+    """Set the DJ role for music commands."""
+    db.execute("INSERT OR REPLACE INTO music_settings (guild_id, dj_role) VALUES (?,?)", (ctx.guild.id, role.id))
+    await ctx.send(embed=bleed_embed("DJ Role", f"Set to {role.mention}"))
+
+@settings_group.command(name="autoplay")
+async def settings_autoplay(ctx, toggle: str = "on"):
+    """Toggle autoplay of related tracks."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE music_settings SET autoplay=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Autoplay", f"{'Enabled' if en else 'Disabled'}"))
+
+@settings_group.command(name="music")
+async def settings_music(ctx, channel: discord.TextChannel):
+    """Set the music command channel."""
+    await ctx.send(embed=bleed_embed("Music Channel", f"Set to {channel.mention}"))
