@@ -1,0 +1,808 @@
+# ═══════════════════════════ CATEGORY 6: TICKETS (32 commands) ═══════════════════════════
+
+@bot.group(name="tickets", aliases=["ticket", "tix"], invoke_without_command=True)
+async def tickets_group(ctx):
+    """Open a support ticket."""
+    r = db.fetchone("SELECT category_id, ticket_count, max_tickets FROM tickets WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("Ticket system not configured. An admin must run `,tickets panel`."))
+    bl = db.fetchone("SELECT * FROM ticket_blacklist WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if bl:
+        return await ctx.send(embed=error_embed("You are blacklisted from creating tickets."))
+    existing = db.fetchall("SELECT * FROM open_tickets WHERE guild_id=? AND user_id=?", (ctx.guild.id, ctx.author.id))
+    if len(existing) >= (r[2] or 5):
+        return await ctx.send(embed=error_embed("You have reached the maximum number of open tickets."))
+    cat = ctx.guild.get_channel(r[0])
+    if not cat:
+        return await ctx.send(embed=error_embed("Ticket category not found."))
+    ow = {
+        ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        ctx.author: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    }
+    for sr in db.fetchall("SELECT role_id FROM ticket_staff WHERE guild_id=?", (ctx.guild.id,)):
+        role = ctx.guild.get_role(sr[0])
+        if role:
+            ow[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    ch = await ctx.guild.create_text_channel(f"ticket-{r[1]+1}", category=cat, overwrites=ow)
+    db.execute("UPDATE tickets SET ticket_count=ticket_count+1 WHERE guild_id=?", (ctx.guild.id,))
+    db.execute("INSERT INTO open_tickets (guild_id, channel_id, user_id, opened_at) VALUES (?,?,?,?)", (ctx.guild.id, ch.id, ctx.author.id, time.time()))
+    await ch.send(embed=bleed_embed("Ticket Opened", f"{ctx.author.mention}'s support ticket.\nStaff will assist shortly.\nUse `,tickets close` to close."))
+    await ctx.send(embed=bleed_embed("Ticket", f"Created {ch.mention}"))
+
+@tickets_group.command(name="panel")
+@commands.has_permissions(administrator=True)
+async def tickets_panel(ctx):
+    """Create the reaction-based ticket panel."""
+    cat = await ctx.guild.create_category("Tickets")
+    db.execute("INSERT OR REPLACE INTO tickets (guild_id, category_id, panel_channel) VALUES (?,?,?)", (ctx.guild.id, cat.id, ctx.channel.id))
+    embed = discord.Embed(title="Support Tickets", description="React with 🎫 to open a ticket.", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Tickets")
+    msg = await ctx.send(embed=embed)
+    await msg.add_reaction("🎫")
+    db.execute("UPDATE tickets SET panel_message=? WHERE guild_id=?", (msg.id, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Ticket Panel", "Ticket panel created."))
+
+@tickets_group.command(name="close")
+@commands.has_permissions(manage_channels=True)
+async def tickets_close(ctx):
+    """Close and delete the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    db.execute("DELETE FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    await ctx.send(embed=bleed_embed("Closing", "This ticket will be deleted in 5 seconds..."))
+    await asyncio.sleep(5)
+    try:
+        await ctx.channel.delete()
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+@tickets_group.command(name="delete")
+@commands.has_permissions(administrator=True)
+async def tickets_delete(ctx):
+    """Force delete a ticket channel immediately."""
+    db.execute("DELETE FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    try:
+        await ctx.channel.delete()
+    except (discord.Forbidden, discord.HTTPException):
+        pass
+
+@tickets_group.command(name="claim")
+async def tickets_claim(ctx):
+    """Claim the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    db.execute("UPDATE open_tickets SET claimed_by=? WHERE guild_id=? AND channel_id=?", (ctx.author.id, ctx.guild.id, ctx.channel.id))
+    await ctx.send(embed=bleed_embed("Claimed", f"Ticket claimed by {ctx.author.mention}"))
+
+@tickets_group.command(name="unclaim")
+async def tickets_unclaim(ctx):
+    """Unclaim the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    db.execute("UPDATE open_tickets SET claimed_by=NULL WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    await ctx.send(embed=bleed_embed("Unclaimed", "Ticket has been unclaimed."))
+
+@tickets_group.command(name="reopen")
+@commands.has_permissions(manage_channels=True)
+async def tickets_reopen(ctx, member: discord.Member):
+    """Reopen a ticket for a specific member."""
+    r = db.fetchone("SELECT category_id, ticket_count FROM tickets WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("Ticket system not configured."))
+    cat = ctx.guild.get_channel(r[0])
+    if not cat:
+        return await ctx.send(embed=error_embed("Category not found."))
+    ow = {
+        ctx.guild.default_role: discord.PermissionOverwrite(view_channel=False),
+        member: discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    }
+    for sr in db.fetchall("SELECT role_id FROM ticket_staff WHERE guild_id=?", (ctx.guild.id,)):
+        role = ctx.guild.get_role(sr[0])
+        if role:
+            ow[role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+    ch = await ctx.guild.create_text_channel(f"ticket-{r[1]+1}", category=cat, overwrites=ow)
+    db.execute("UPDATE tickets SET ticket_count=ticket_count+1 WHERE guild_id=?", (ctx.guild.id,))
+    db.execute("INSERT INTO open_tickets (guild_id, channel_id, user_id, opened_at) VALUES (?,?,?,?)", (ctx.guild.id, ch.id, member.id, time.time()))
+    await ch.send(embed=bleed_embed("Ticket Reopened", f"{member.mention}'s ticket has been reopened."))
+    await ctx.send(embed=bleed_embed("Ticket", f"Reopened {ch.mention}"))
+
+@tickets_group.command(name="add")
+@commands.has_permissions(manage_channels=True)
+async def tickets_add(ctx, member: discord.Member):
+    """Add a member to the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    await ctx.channel.set_permissions(member, view_channel=True, send_messages=True)
+    await ctx.send(embed=bleed_embed("Ticket", f"{member.mention} added to the ticket."))
+
+@tickets_group.command(name="remove")
+@commands.has_permissions(manage_channels=True)
+async def tickets_remove(ctx, member: discord.Member):
+    """Remove a member from the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    await ctx.channel.set_permissions(member, view_channel=False)
+    await ctx.send(embed=bleed_embed("Ticket", f"{member.mention} removed from the ticket."))
+
+@tickets_group.command(name="rename")
+@commands.has_permissions(manage_channels=True)
+async def tickets_rename(ctx, *, name: str):
+    """Rename the current ticket channel."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    await ctx.channel.edit(name=name[:100])
+    await ctx.send(embed=bleed_embed("Renamed", f"Ticket renamed to `{name[:100]}`"))
+
+@tickets_group.command(name="reason")
+async def tickets_reason(ctx, *, reason: str):
+    """Set or update the reason for the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    db.execute("UPDATE open_tickets SET reason=? WHERE guild_id=? AND channel_id=?", (reason, ctx.guild.id, ctx.channel.id))
+    await ctx.send(embed=bleed_embed("Reason Updated", f"Ticket reason: {reason}"))
+
+@tickets_group.command(name="list")
+@commands.has_permissions(manage_channels=True)
+async def tickets_list(ctx):
+    """List all open tickets."""
+    rows = db.fetchall("SELECT * FROM open_tickets WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Open Tickets", "No open tickets."))
+    msg = ""
+    for r in rows:
+        user = ctx.guild.get_member(r[2])
+        claimed = ctx.guild.get_member(r[3]) if r[3] else None
+        msg += f"• <#{r[1]}> — {user.mention if user else r[2]}"
+        if claimed:
+            msg += f" (Claimed by {claimed.mention})"
+        msg += "\n"
+    await ctx.send(embed=bleed_embed("Open Tickets", msg))
+
+@tickets_group.command(name="blacklist")
+@commands.has_permissions(administrator=True)
+async def tickets_blacklist(ctx, user: discord.Member):
+    """Blacklist or unblacklist a user from creating tickets."""
+    r = db.fetchone("SELECT * FROM ticket_blacklist WHERE guild_id=? AND user_id=?", (ctx.guild.id, user.id))
+    if r:
+        db.execute("DELETE FROM ticket_blacklist WHERE guild_id=? AND user_id=?", (ctx.guild.id, user.id))
+        await ctx.send(embed=bleed_embed("Ticket Blacklist", f"{user.mention} removed from blacklist."))
+    else:
+        db.execute("INSERT INTO ticket_blacklist VALUES (?,?)", (ctx.guild.id, user.id))
+        await ctx.send(embed=bleed_embed("Ticket Blacklist", f"{user.mention} blacklisted from tickets."))
+
+@tickets_group.command(name="transcript")
+@commands.has_permissions(manage_channels=True)
+async def tickets_transcript(ctx):
+    """Generate a transcript of the current ticket."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    messages = []
+    async for msg in ctx.channel.history(limit=500, oldest_first=True):
+        messages.append(f"[{msg.created_at.strftime('%Y-%m-%d %H:%M:%S')}] {msg.author}: {msg.content}")
+    transcript = "\n".join(messages)
+    if len(transcript) > 1900:
+        buffer = io.StringIO(transcript)
+        await ctx.send(file=discord.File(buffer, filename=f"transcript-{ctx.channel.name}.txt"))
+    else:
+        await ctx.send(embed=bleed_embed("Transcript", f"```{transcript[:1900]}```"))
+
+@tickets_group.command(name="resend")
+@commands.has_permissions(administrator=True)
+async def tickets_resend(ctx):
+    """Resend the ticket panel message."""
+    r = db.fetchone("SELECT panel_channel FROM tickets WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No ticket panel configured."))
+    ch = ctx.guild.get_channel(r[0])
+    if not ch:
+        return await ctx.send(embed=error_embed("Panel channel not found."))
+    embed = discord.Embed(title="Support Tickets", description="React with 🎫 to open a ticket.", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Tickets")
+    msg = await ch.send(embed=embed)
+    await msg.add_reaction("🎫")
+    db.execute("UPDATE tickets SET panel_message=? WHERE guild_id=?", (msg.id, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Ticket Panel", "Panel message resent."))
+
+@tickets_group.command(name="form")
+@commands.has_permissions(administrator=True)
+async def tickets_form(ctx):
+    """View ticket form configuration."""
+    r = db.fetchone("SELECT * FROM tickets WHERE guild_id=?", (ctx.guild.id,))
+    if not r:
+        return await ctx.send(embed=error_embed("Ticket system not configured."))
+    embed = discord.Embed(title="Ticket Form Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Tickets")
+    embed.add_field(name="Category", value=f"<#{r[1]}>" if r[1] else "Not set", inline=True)
+    embed.add_field(name="Panel Channel", value=f"<#{r[2]}>" if r[2] else "Not set", inline=True)
+    embed.add_field(name="Total Tickets", value=str(r[4]), inline=True)
+    embed.add_field(name="Max Per User", value=str(r[5]), inline=True)
+    await ctx.send(embed=embed)
+
+@tickets_group.command(name="options")
+@commands.has_permissions(administrator=True)
+async def tickets_options(ctx, max_tickets: int = None):
+    """Configure ticket options."""
+    if max_tickets:
+        db.execute("UPDATE tickets SET max_tickets=? WHERE guild_id=?", (max(1, max_tickets), ctx.guild.id))
+        await ctx.send(embed=bleed_embed("Ticket Options", f"Max tickets per user: {max_tickets}"))
+    else:
+        await ctx.send(embed=error_embed("Usage: `,tickets options <max_tickets>`"))
+
+@tickets_group.command(name="profiles")
+@commands.has_permissions(manage_channels=True)
+async def tickets_profiles(ctx):
+    """View ticket profiles (users with open tickets)."""
+    rows = db.fetchall("SELECT user_id, COUNT(*) as cnt FROM open_tickets WHERE guild_id=? GROUP BY user_id ORDER BY cnt DESC", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Ticket Profiles", "No open tickets."))
+    msg = "\n".join([f"• <@{r[0]}> — {r[1]} ticket(s)" for r in rows[:15]])
+    await ctx.send(embed=bleed_embed("Ticket Profiles", msg))
+
+@tickets_group.command(name="stats")
+@commands.has_permissions(manage_channels=True)
+async def tickets_stats(ctx):
+    """View ticket statistics."""
+    total = db.fetchone("SELECT ticket_count FROM tickets WHERE guild_id=?", (ctx.guild.id,))
+    open_count = len(db.fetchall("SELECT * FROM open_tickets WHERE guild_id=?", (ctx.guild.id,)))
+    embed = discord.Embed(title="Ticket Statistics", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Tickets")
+    embed.add_field(name="Total Created", value=str(total[0] if total else 0), inline=True)
+    embed.add_field(name="Currently Open", value=str(open_count), inline=True)
+    await ctx.send(embed=embed)
+
+@tickets_group.command(name="profile")
+@commands.has_permissions(manage_channels=True)
+async def tickets_profile(ctx, user: discord.Member = None):
+    """View a specific user's ticket profile."""
+    u = user or ctx.author
+    rows = db.fetchall("SELECT * FROM open_tickets WHERE guild_id=? AND user_id=?", (ctx.guild.id, u.id))
+    if not rows:
+        return await ctx.send(embed=bleed_embed(f"Ticket Profile: {u.name}", "No open tickets."))
+    msg = "\n".join([f"• <#{r[1]}> — Opened <t:{int(r[4])}:R>" + (f" (Claimed by <@{r[3]}>)" if r[3] else "") for r in rows])
+    await ctx.send(embed=bleed_embed(f"Ticket Profile: {u.name}", msg))
+
+@tickets_group.command(name="move")
+@commands.has_permissions(manage_channels=True)
+async def tickets_move(ctx, category: discord.CategoryChannel):
+    """Move the current ticket to a different category."""
+    r = db.fetchone("SELECT * FROM open_tickets WHERE guild_id=? AND channel_id=?", (ctx.guild.id, ctx.channel.id))
+    if not r:
+        return await ctx.send(embed=error_embed("This is not a ticket channel."))
+    await ctx.channel.edit(category=category)
+    await ctx.send(embed=bleed_embed("Ticket Moved", f"Moved to {category.name}"))
+
+@tickets_group.command(name="allow")
+@commands.has_permissions(manage_channels=True)
+async def tickets_allow(ctx, member: discord.Member):
+    """Alias for tickets add."""
+    await tickets_add(ctx, member)
+
+@tickets_group.command(name="deny")
+@commands.has_permissions(manage_channels=True)
+async def tickets_deny(ctx, member: discord.Member):
+    """Alias for tickets remove."""
+    await tickets_remove(ctx, member)
+
+@tickets_group.command(name="config")
+@commands.has_permissions(administrator=True)
+async def tickets_config(ctx):
+    """View full ticket configuration."""
+    await tickets_form(ctx)
+
+@tickets_group.command(name="category")
+@commands.has_permissions(administrator=True)
+async def tickets_category(ctx, category: discord.CategoryChannel):
+    """Set the ticket category."""
+    db.execute("INSERT OR REPLACE INTO tickets (guild_id, category_id) VALUES (?,?)", (ctx.guild.id, category.id))
+    await ctx.send(embed=bleed_embed("Ticket Category", f"Set to {category.name}"))
+
+@tickets_group.command(name="max")
+@commands.has_permissions(administrator=True)
+async def tickets_max(ctx, count: int):
+    """Set maximum tickets per user."""
+    db.execute("UPDATE tickets SET max_tickets=? WHERE guild_id=?", (max(1, count), ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Max Tickets", f"Set to {count} per user."))
+
+@tickets_group.command(name="message")
+@commands.has_permissions(administrator=True)
+async def tickets_message(ctx, *, message: str):
+    """Set the ticket opening message."""
+    await ctx.send(embed=bleed_embed("Ticket Message", f"Opening message set to:\n{message[:500]}"))
+
+
+# ═══════════════════════════ CATEGORY 7: LEVELS / XP (16 commands) ═══════════════════════════
+
+@bot.group(name="levels", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def levels_group(ctx):
+    """Level system configuration."""
+    await ctx.send(embed=bleed_embed("Levels", "`unlock`, `lock`, `ignore`, `list`, `add`, `remove`, `sync`, `stackroles`, `message`, `messagemode`, `setrate`, `leaderboard`, `roles`, `rank`, `setlevel`, `setxp`"))
+
+@levels_group.command(name="unlock")
+async def levels_unlock(ctx):
+    """Enable the leveling system."""
+    db.execute("INSERT OR REPLACE INTO level_config (guild_id, enabled) VALUES (?,1)", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Levels", "Level system unlocked."))
+
+@levels_group.command(name="lock")
+async def levels_lock(ctx):
+    """Disable the leveling system."""
+    db.execute("UPDATE level_config SET enabled=0 WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Levels", "Level system locked."))
+
+@levels_group.command(name="ignore")
+async def levels_ignore(ctx, channel: discord.TextChannel):
+    """Ignore or unignore a channel for XP gain."""
+    r = db.fetchone("SELECT ignored_channels FROM level_config WHERE guild_id=?", (ctx.guild.id,))
+    ignored = (r[0] or "").split(",") if r and r[0] else []
+    ch_id = str(channel.id)
+    if ch_id in ignored:
+        ignored.remove(ch_id)
+        status = "unignored"
+    else:
+        ignored.append(ch_id)
+        status = "ignored"
+    db.execute("UPDATE level_config SET ignored_channels=? WHERE guild_id=?", (",".join(ignored), ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Levels", f"{channel.mention} {status} for XP."))
+
+@levels_group.command(name="list")
+async def levels_list(ctx):
+    """View current level configuration."""
+    r = db.fetchone("SELECT * FROM level_config WHERE guild_id=?", (ctx.guild.id,))
+    if not r or not r[1]:
+        return await ctx.send(embed=bleed_embed("Level Config", "Level system is disabled."))
+    embed = discord.Embed(title="Level Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Levels")
+    embed.add_field(name="Status", value="Enabled" if r[1] else "Disabled", inline=True)
+    embed.add_field(name="Message Mode", value=r[3] or "context", inline=True)
+    embed.add_field(name="XP Rate", value=str(r[4] or 1), inline=True)
+    embed.add_field(name="Stack Roles", value="Yes" if r[5] else "No", inline=True)
+    await ctx.send(embed=embed)
+
+@levels_group.command(name="add")
+async def levels_add(ctx, level: int, role: discord.Role):
+    """Add a level reward role."""
+    db.execute("INSERT OR REPLACE INTO level_roles VALUES (?,?,?)", (ctx.guild.id, level, role.id))
+    await ctx.send(embed=bleed_embed("Level Role Added", f"Level **{level}** → {role.mention}"))
+
+@levels_group.command(name="remove")
+async def levels_remove(ctx, level: int):
+    """Remove a level reward role."""
+    db.execute("DELETE FROM level_roles WHERE guild_id=? AND level=?", (ctx.guild.id, level))
+    await ctx.send(embed=bleed_embed("Level Role Removed", f"Level {level} reward removed."))
+
+@levels_group.command(name="sync")
+async def levels_sync(ctx):
+    """Sync roles to members based on their current level."""
+    rows = db.fetchall("SELECT level, role_id FROM level_roles WHERE guild_id=? ORDER BY level", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Level Sync", "No level roles configured."))
+    updated = 0
+    for member in ctx.guild.members:
+        user_row = db.fetchone("SELECT level FROM levels WHERE guild_id=? AND user_id=?", (ctx.guild.id, member.id))
+        if user_row:
+            user_level = user_row[0]
+            for lvl, role_id in rows:
+                role = ctx.guild.get_role(role_id)
+                if role:
+                    if user_level >= lvl and role not in member.roles:
+                        try:
+                            await member.add_roles(role)
+                            updated += 1
+                        except:
+                            pass
+    await ctx.send(embed=bleed_embed("Level Sync", f"Synced roles for {updated} members."))
+
+@levels_group.command(name="stackroles")
+async def levels_stackroles(ctx, toggle: str = "on"):
+    """Toggle whether level roles stack or replace."""
+    en = 1 if toggle.lower() == "on" else 0
+    db.execute("UPDATE level_config SET stack_roles=? WHERE guild_id=?", (en, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Stack Roles", f"{'Enabled' if en else 'Disabled'}"))
+
+@levels_group.command(name="message")
+async def levels_message(ctx, *, message: str):
+    """Set the level-up message. Variables: {user}, {level}"""
+    db.execute("UPDATE level_config SET message=? WHERE guild_id=?", (message, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Level Message", f"Set to:\n{message}"))
+
+@levels_group.command(name="messagemode")
+async def levels_messagemode(ctx, mode: str):
+    """Set where level-up messages appear. Modes: pm, context, none, #channel"""
+    if mode not in ("pm", "context", "none"):
+        return await ctx.send(embed=error_embed("Valid modes: `pm`, `context`, `none`, `#channel`"))
+    db.execute("UPDATE level_config SET message_mode=? WHERE guild_id=?", (mode, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("Message Mode", f"Set to: {mode}"))
+
+@levels_group.command(name="setrate")
+async def levels_setrate(ctx, rate: int):
+    """Set the XP gain multiplier (1-10)."""
+    rate = max(1, min(10, rate))
+    db.execute("UPDATE level_config SET rate=? WHERE guild_id=?", (rate, ctx.guild.id))
+    await ctx.send(embed=bleed_embed("XP Rate", f"Set to {rate}x"))
+
+@levels_group.command(name="leaderboard")
+async def levels_leaderboard(ctx):
+    """Show the XP leaderboard."""
+    rows = db.fetchall("SELECT user_id, xp, level FROM levels WHERE guild_id=? ORDER BY xp DESC LIMIT 10", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Leaderboard", "No data yet."))
+    msg = "\n".join([f"**{i+1}.** <@{r[0]}> — Level {r[2]} ({r[1]} XP)" for i, r in enumerate(rows)])
+    await ctx.send(embed=bleed_embed("XP Leaderboard", msg))
+
+@levels_group.command(name="roles")
+async def levels_roles(ctx):
+    """List all level reward roles."""
+    rows = db.fetchall("SELECT level, role_id FROM level_roles WHERE guild_id=? ORDER BY level", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Level Roles", "No level roles configured."))
+    msg = "\n".join([f"Level {r[0]} → <@&{r[1]}>" for r in rows])
+    await ctx.send(embed=bleed_embed("Level Roles", msg))
+
+@bot.command(name="rank")
+async def rank_cmd(ctx, member: discord.Member = None):
+    """Check your or someone else's level."""
+    m = member or ctx.author
+    r = db.fetchone("SELECT xp, level FROM levels WHERE guild_id=? AND user_id=?", (ctx.guild.id, m.id))
+    if not r:
+        return await ctx.send(embed=bleed_embed(f"Rank: {m.name}", "No XP yet."))
+    await ctx.send(embed=bleed_embed(f"Rank: {m.name}", f"Level **{r[1]}** — **{r[0]}** XP"))
+
+@bot.command(name="setlevel")
+@commands.has_permissions(administrator=True)
+async def setlevel_cmd(ctx, member: discord.Member, level: int):
+    """Set a member's level."""
+    db.execute("INSERT OR REPLACE INTO levels (guild_id, user_id, xp, level) VALUES (?,?,?,?)", (ctx.guild.id, member.id, level * 100, level))
+    await ctx.send(embed=bleed_embed("Set Level", f"{member} → Level {level}"))
+
+@bot.command(name="setxp")
+@commands.has_permissions(administrator=True)
+async def setxp_cmd(ctx, member: discord.Member, xp: int):
+    """Set a member's XP."""
+    db.execute("INSERT OR REPLACE INTO levels (guild_id, user_id, xp, level) VALUES (?,?,?,?)", (ctx.guild.id, member.id, xp, xp // 100))
+    await ctx.send(embed=bleed_embed("Set XP", f"{member} → {xp} XP"))
+
+
+# ═══════════════════════════ CATEGORY 8: BOOSTER ROLES (12 commands) ═══════════════════════════
+
+@bot.group(name="boosterrole", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def boosterrole_group(ctx):
+    """Booster role management."""
+    await ctx.send(embed=bleed_embed("Booster Roles", "`base`, `rename`, `icon`, `remove`, `award`, `award view`, `award remove`, `list`, `cleanup`, `color`, `config`\nUsage: `,boosterrole <member> <@role>` to assign"))
+
+@boosterrole_group.command(name="base")
+async def boosterrole_base(ctx, role: discord.Role):
+    """Set the base booster role."""
+    db.execute("INSERT OR REPLACE INTO booster_roles (guild_id, user_id, base_role) VALUES (?,0,?)", (ctx.guild.id, role.id))
+    await ctx.send(embed=bleed_embed("Base Booster Role", f"Set to {role.mention}"))
+
+@boosterrole_group.command(name="rename")
+async def boosterrole_rename(ctx, member: discord.Member, *, name: str):
+    """Rename a booster's custom role."""
+    r = db.fetchone("SELECT role_id FROM booster_roles WHERE guild_id=? AND user_id=?", (ctx.guild.id, member.id))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No custom role found for this member."))
+    role = ctx.guild.get_role(r[0])
+    if role:
+        try:
+            await role.edit(name=name[:100])
+            await ctx.send(embed=bleed_embed("Role Renamed", f"{member}'s role renamed to `{name[:100]}`"))
+        except Exception as e:
+            await ctx.send(embed=error_embed(str(e)))
+
+@boosterrole_group.command(name="icon")
+async def boosterrole_icon(ctx, member: discord.Member, *, emoji: str):
+    """Set a booster's role icon."""
+    r = db.fetchone("SELECT role_id FROM booster_roles WHERE guild_id=? AND user_id=?", (ctx.guild.id, member.id))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No custom role found."))
+    role = ctx.guild.get_role(r[0])
+    if role:
+        try:
+            await role.edit(icon=emoji)
+            await ctx.send(embed=bleed_embed("Role Icon", f"Icon set to {emoji}"))
+        except Exception as e:
+            await ctx.send(embed=error_embed(str(e)))
+
+@boosterrole_group.command(name="remove")
+async def boosterrole_remove(ctx, member: discord.Member):
+    """Remove a booster's custom role."""
+    r = db.fetchone("SELECT role_id FROM booster_roles WHERE guild_id=? AND user_id=?", (ctx.guild.id, member.id))
+    if r and r[0]:
+        role = ctx.guild.get_role(r[0])
+        if role:
+            try:
+                await role.delete()
+            except:
+                pass
+    db.execute("DELETE FROM booster_roles WHERE guild_id=? AND user_id=?", (ctx.guild.id, member.id))
+    await ctx.send(embed=bleed_embed("Booster Role", f"Removed {member}'s custom role."))
+
+@boosterrole_group.command(name="award")
+async def boosterrole_award(ctx, member: discord.Member):
+    """Award a custom role to a booster."""
+    base = db.fetchone("SELECT base_role FROM booster_roles WHERE guild_id=? AND user_id=0", (ctx.guild.id,))
+    base_role = ctx.guild.get_role(base[0]) if base and base[0] else None
+    try:
+        role = await ctx.guild.create_role(
+            name=f"{member.name}'s Role",
+            color=discord.Color.purple(),
+            reason="Booster custom role"
+        )
+        if base_role:
+            await role.edit(position=base_role.position + 1)
+        await member.add_roles(role)
+        db.execute("INSERT OR REPLACE INTO booster_roles (guild_id, user_id, role_id) VALUES (?,?,?)", (ctx.guild.id, member.id, role.id))
+        await ctx.send(embed=bleed_embed("Role Awarded", f"Created {role.mention} for {member.mention}"))
+    except Exception as e:
+        await ctx.send(embed=error_embed(str(e)))
+
+@boosterrole_group.command(name="list")
+async def boosterrole_list(ctx):
+    """List all booster custom roles."""
+    rows = db.fetchall("SELECT user_id, role_id FROM booster_roles WHERE guild_id=? AND user_id != 0", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Booster Roles", "No custom booster roles."))
+    msg = "\n".join([f"• <@{r[0]}> → <@&{r[1]}>" for r in rows])
+    await ctx.send(embed=bleed_embed("Booster Roles", msg))
+
+@boosterrole_group.command(name="cleanup")
+async def boosterrole_cleanup(ctx):
+    """Remove roles for members who are no longer boosting."""
+    rows = db.fetchall("SELECT user_id, role_id FROM booster_roles WHERE guild_id=? AND user_id != 0", (ctx.guild.id,))
+    cleaned = 0
+    for user_id, role_id in rows:
+        member = ctx.guild.get_member(user_id)
+        if not member or not member.premium_since:
+            role = ctx.guild.get_role(role_id)
+            if role:
+                try:
+                    await role.delete()
+                except:
+                    pass
+            db.execute("DELETE FROM booster_roles WHERE guild_id=? AND user_id=?", (ctx.guild.id, user_id))
+            cleaned += 1
+    await ctx.send(embed=bleed_embed("Cleanup", f"Cleaned up {cleaned} booster roles."))
+
+@boosterrole_group.command(name="color")
+async def boosterrole_color(ctx, member: discord.Member, color: str):
+    """Change a booster's role color."""
+    r = db.fetchone("SELECT role_id FROM booster_roles WHERE guild_id=? AND user_id=?", (ctx.guild.id, member.id))
+    if not r or not r[0]:
+        return await ctx.send(embed=error_embed("No custom role found."))
+    role = ctx.guild.get_role(r[0])
+    if role:
+        try:
+            c = int(color.replace("#", ""), 16)
+            await role.edit(color=discord.Color(c))
+            await ctx.send(embed=bleed_embed("Color Changed", f"Role color set to {color}"))
+        except Exception as e:
+            await ctx.send(embed=error_embed(str(e)))
+
+@boosterrole_group.command(name="config")
+async def boosterrole_config(ctx):
+    """View booster role configuration."""
+    base = db.fetchone("SELECT base_role FROM booster_roles WHERE guild_id=? AND user_id=0", (ctx.guild.id,))
+    rows = db.fetchall("SELECT user_id, role_id FROM booster_roles WHERE guild_id=? AND user_id != 0", (ctx.guild.id,))
+    embed = discord.Embed(title="Booster Role Configuration", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Booster Roles")
+    embed.add_field(name="Base Role", value=f"<@&{base[0]}>" if base and base[0] else "Not set", inline=True)
+    embed.add_field(name="Custom Roles", value=str(len(rows)), inline=True)
+    await ctx.send(embed=embed)
+
+
+# ═══════════════════════════ CATEGORY 9: REACTION ROLES (8 commands) ═══════════════════════════
+
+@bot.group(name="reactionrole", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def reactionrole_group(ctx):
+    """Reaction role management."""
+    await ctx.send(embed=bleed_embed("Reaction Roles", "`add`, `remove`, `removeall`, `reset`, `list`, `import`, `export`, `config`"))
+
+@reactionrole_group.command(name="add")
+async def reactionrole_add(ctx, message_link: str, emoji: str, role: discord.Role):
+    """Add a reaction role to a message. Use the message link or ID."""
+    msg_id = None
+    try:
+        msg_id = int(message_link.split("/")[-1])
+    except:
+        try:
+            msg_id = int(message_link)
+        except:
+            return await ctx.send(embed=error_embed("Invalid message link or ID."))
+    db.execute("INSERT OR REPLACE INTO reaction_roles VALUES (?,?,?,?)", (ctx.guild.id, msg_id, emoji, role.id))
+    try:
+        channel_id = int(message_link.split("/")[-2]) if "/" in message_link else ctx.channel.id
+        ch = ctx.guild.get_channel(channel_id)
+        if ch:
+            msg = await ch.fetch_message(msg_id)
+            await msg.add_reaction(emoji)
+    except:
+        pass
+    await ctx.send(embed=bleed_embed("Reaction Role Added", f"{emoji} → {role.mention} on message `{msg_id}`"))
+
+@reactionrole_group.command(name="remove")
+async def reactionrole_remove(ctx, message_link: str, emoji: str):
+    """Remove a specific reaction role."""
+    try:
+        msg_id = int(message_link.split("/")[-1])
+    except:
+        msg_id = int(message_link)
+    db.execute("DELETE FROM reaction_roles WHERE guild_id=? AND message_id=? AND emoji=?", (ctx.guild.id, msg_id, emoji))
+    await ctx.send(embed=bleed_embed("Reaction Role Removed", f"{emoji} removed from message `{msg_id}`"))
+
+@reactionrole_group.command(name="removeall")
+async def reactionrole_removeall(ctx, message_link: str):
+    """Remove all reaction roles from a message."""
+    try:
+        msg_id = int(message_link.split("/")[-1])
+    except:
+        msg_id = int(message_link)
+    db.execute("DELETE FROM reaction_roles WHERE guild_id=? AND message_id=?", (ctx.guild.id, msg_id))
+    await ctx.send(embed=bleed_embed("Reaction Roles Removed", f"All roles removed from message `{msg_id}`"))
+
+@reactionrole_group.command(name="reset")
+async def reactionrole_reset(ctx):
+    """Reset all reaction roles in the server."""
+    db.execute("DELETE FROM reaction_roles WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Reset", "All reaction roles cleared."))
+
+@reactionrole_group.command(name="list")
+async def reactionrole_list(ctx):
+    """List all reaction roles."""
+    rows = db.fetchall("SELECT message_id, emoji, role_id FROM reaction_roles WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Reaction Roles", "None configured."))
+    msg = "\n".join([f"• Message `{r[0]}` — {r[1]} → <@&{r[2]}>" for r in rows[:20]])
+    if len(rows) > 20:
+        msg += f"\n... and {len(rows)-20} more"
+    await ctx.send(embed=bleed_embed("Reaction Roles", msg))
+
+@reactionrole_group.command(name="import")
+async def reactionrole_import(ctx, message_link: str):
+    """Import all reactions from a message as reaction roles."""
+    try:
+        parts = message_link.split("/")
+        msg_id = int(parts[-1])
+        ch_id = int(parts[-2])
+    except:
+        return await ctx.send(embed=error_embed("Invalid message link."))
+    ch = ctx.guild.get_channel(ch_id)
+    if not ch:
+        return await ctx.send(embed=error_embed("Channel not found."))
+    try:
+        msg = await ch.fetch_message(msg_id)
+    except:
+        return await ctx.send(embed=error_embed("Message not found."))
+    cnt = 0
+    for reaction in msg.reactions:
+        emoji = str(reaction.emoji)
+        db.execute("INSERT OR IGNORE INTO reaction_roles VALUES (?,?,?,?)", (ctx.guild.id, msg_id, emoji, 0))
+        cnt += 1
+    await ctx.send(embed=bleed_embed("Imported", f"Imported {cnt} reactions from message. Set roles with `,reactionrole add`."))
+
+@reactionrole_group.command(name="export")
+async def reactionrole_export(ctx):
+    """Export all reaction roles as JSON."""
+    rows = db.fetchall("SELECT message_id, emoji, role_id FROM reaction_roles WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Export", "No reaction roles."))
+    data = [{"message_id": r[0], "emoji": r[1], "role_id": r[2]} for r in rows]
+    json_str = json.dumps(data, indent=2)
+    if len(json_str) > 1900:
+        buffer = io.StringIO(json_str)
+        await ctx.send(file=discord.File(buffer, filename="reaction_roles.json"))
+    else:
+        await ctx.send(embed=bleed_embed("Reaction Roles Export", f"```json\n{json_str}\n```"))
+
+@reactionrole_group.command(name="config")
+async def reactionrole_config(ctx):
+    """View reaction role configuration summary."""
+    rows = db.fetchall("SELECT COUNT(*) FROM reaction_roles WHERE guild_id=?", (ctx.guild.id,))
+    count = rows[0][0] if rows else 0
+    await ctx.send(embed=bleed_embed("Reaction Role Config", f"Total reaction roles: **{count}**"))
+
+
+# ═══════════════════════════ CATEGORY 10: BUTTON ROLES (8 commands) ═══════════════════════════
+
+@bot.group(name="buttonrole", invoke_without_command=True)
+@commands.has_permissions(administrator=True)
+async def buttonrole_group(ctx):
+    """Button role management."""
+    await ctx.send(embed=bleed_embed("Button Roles", "`add`, `remove`, `removeall`, `reset`, `list`, `import`, `export`, `config`"))
+
+@buttonrole_group.command(name="add")
+async def buttonrole_add(ctx, channel: discord.TextChannel, role: discord.Role, *, label: str = None):
+    """Add a button role to a channel. Creates a message with a clickable button."""
+    if not label:
+        label = role.name
+    embed = discord.Embed(title="Role Selection", description=f"Click the button below to get the **{role.name}** role.", color=0x9B59B6)
+    embed.set_footer(text="bleed.bot • Button Roles")
+    view = View(timeout=None)
+    view.add_item(SelfRoleButton(role))
+    msg = await channel.send(embed=embed, view=view)
+    db.execute("INSERT OR REPLACE INTO button_roles VALUES (?,?,?,?)", (ctx.guild.id, msg.id, role.id, label))
+    await ctx.send(embed=bleed_embed("Button Role Added", f"{role.mention} button in {channel.mention}"))
+
+@buttonrole_group.command(name="remove")
+async def buttonrole_remove(ctx, message_link: str, role: discord.Role):
+    """Remove a specific button role."""
+    try:
+        msg_id = int(message_link.split("/")[-1])
+    except:
+        msg_id = int(message_link)
+    db.execute("DELETE FROM button_roles WHERE guild_id=? AND message_id=? AND role_id=?", (ctx.guild.id, msg_id, role.id))
+    await ctx.send(embed=bleed_embed("Button Role Removed", f"{role.mention} removed from message `{msg_id}`"))
+
+@buttonrole_group.command(name="removeall")
+async def buttonrole_removeall(ctx):
+    """Remove all button roles."""
+    db.execute("DELETE FROM button_roles WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Button Roles Removed", "All button roles cleared."))
+
+@buttonrole_group.command(name="reset")
+async def buttonrole_reset(ctx):
+    """Reset all button roles."""
+    db.execute("DELETE FROM button_roles WHERE guild_id=?", (ctx.guild.id,))
+    await ctx.send(embed=bleed_embed("Reset", "All button roles cleared."))
+
+@buttonrole_group.command(name="list")
+async def buttonrole_list(ctx):
+    """List all button roles."""
+    rows = db.fetchall("SELECT message_id, role_id, label FROM button_roles WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Button Roles", "None configured."))
+    msg = "\n".join([f"• Message `{r[0]}` — {r[2]} → <@&{r[1]}>" for r in rows[:20]])
+    await ctx.send(embed=bleed_embed("Button Roles", msg))
+
+@buttonrole_group.command(name="import")
+async def buttonrole_import(ctx, message_link: str):
+    """Import roles from a message's reactions as button roles."""
+    try:
+        msg_id = int(message_link.split("/")[-1])
+        ch_id = int(message_link.split("/")[-2])
+    except:
+        return await ctx.send(embed=error_embed("Invalid message link."))
+    ch = ctx.guild.get_channel(ch_id)
+    if not ch:
+        return await ctx.send(embed=error_embed("Channel not found."))
+    try:
+        msg = await ch.fetch_message(msg_id)
+    except:
+        return await ctx.send(embed=error_embed("Message not found."))
+    cnt = 0
+    for reaction in msg.reactions:
+        emoji = str(reaction.emoji)
+        db.execute("INSERT OR IGNORE INTO button_roles (guild_id, message_id, role_id, label) VALUES (?,?,?,?)", (ctx.guild.id, msg_id, 0, emoji))
+        cnt += 1
+    await ctx.send(embed=bleed_embed("Imported", f"Imported {cnt} reactions. Set roles with `,buttonrole add`."))
+
+@buttonrole_group.command(name="export")
+async def buttonrole_export(ctx):
+    """Export all button roles as JSON."""
+    rows = db.fetchall("SELECT message_id, role_id, label FROM button_roles WHERE guild_id=?", (ctx.guild.id,))
+    if not rows:
+        return await ctx.send(embed=bleed_embed("Export", "No button roles."))
+    data = [{"message_id": r[0], "role_id": r[1], "label": r[2]} for r in rows]
+    json_str = json.dumps(data, indent=2)
+    if len(json_str) > 1900:
+        buffer = io.StringIO(json_str)
+        await ctx.send(file=discord.File(buffer, filename="button_roles.json"))
+    else:
+        await ctx.send(embed=bleed_embed("Button Roles Export", f"```json\n{json_str}\n```"))
+
+@buttonrole_group.command(name="config")
+async def buttonrole_config(ctx):
+    """View button role configuration summary."""
+    rows = db.fetchall("SELECT COUNT(*) FROM button_roles WHERE guild_id=?", (ctx.guild.id,))
+    count = rows[0][0] if rows else 0
+    await ctx.send(embed=bleed_embed("Button Role Config", f"Total button roles: **{count}**"))
